@@ -30,6 +30,7 @@ public class PromptInjectionRuleConfig {
 
 
     @PostConstruct
+    @SuppressWarnings("unchecked")
     public void loadRules() {
         Yaml yaml = new Yaml();
         try (InputStream inputStream = rulesFile.getInputStream()) {
@@ -49,48 +50,61 @@ public class PromptInjectionRuleConfig {
             }
 
             // Load injection_patterns
-            Map<String, Object> patternsMap = (Map<String, Object>) yamlData.get("injection_patterns");
-            if (patternsMap != null) {
-                this.englishInjectionPatterns = parseLanguagePatterns(patternsMap, "english", "en");
-                this.japaneseInjectionPatterns = parseLanguagePatterns(patternsMap, "japanese", "ja");
+            // The YAML structure for 'injection_patterns' is now List<Map<String, String>>
+            // Each map has "phrase" and "type"
+            Object rawPatterns = yamlData.get("injection_patterns");
+            if (rawPatterns instanceof List) {
+                List<Map<String, String>> loadedPatternItems = (List<Map<String, String>>) rawPatterns;
 
-                // Combine all pattern strings for PromptInjectionDetector
-                this.englishInjectionPatterns.values().forEach(allPatternStrings::addAll);
-                this.japaneseInjectionPatterns.values().forEach(allPatternStrings::addAll);
-                logger.info("Loaded {} English pattern categories and {} Japanese pattern categories.",
-                            englishInjectionPatterns.size(), japaneseInjectionPatterns.size());
-                logger.info("Total of {} pattern strings loaded for PromptInjectionDetector.", allPatternStrings.size());
+                List<String> englishPhrases = new ArrayList<>();
+                List<String> japanesePhrases = new ArrayList<>();
 
+                for (Map<String, String> item : loadedPatternItems) {
+                    String phrase = item.get("phrase");
+                    String type = item.get("type");
+                    if (phrase != null && !phrase.isEmpty()) {
+                        allPatternStrings.add(phrase); // Add all phrases to allPatternStrings
+                        if (type != null) {
+                            if (type.startsWith("english_")) {
+                                englishPhrases.add(phrase);
+                            } else if (type.startsWith("japanese_")) {
+                                japanesePhrases.add(phrase);
+                            } else {
+                                logger.warn("Pattern phrase '{}' has unrecognized type '{}', adding to generic English list for PromptInjectionRuleConfig.", phrase, type);
+                                englishPhrases.add(phrase);
+                            }
+                        } else {
+                           englishPhrases.add(phrase);
+                           logger.warn("Pattern phrase '{}' has no type, defaulting to English for PromptInjectionRuleConfig.", phrase);
+                        }
+                    }
+                }
+
+                if (!englishPhrases.isEmpty()) {
+                    this.englishInjectionPatterns = Map.of("general_english", englishPhrases);
+                }
+                if (!japanesePhrases.isEmpty()) {
+                    this.japaneseInjectionPatterns = Map.of("general_japanese", japanesePhrases);
+                }
+
+                logger.info("Loaded {} English pattern phrases and {} Japanese pattern phrases into categories for PromptInjectionRuleConfig.",
+                            englishPhrases.size(), japanesePhrases.size());
+                logger.info("Total of {} pattern strings loaded for allPatternStrings in PromptInjectionRuleConfig.", allPatternStrings.size());
+
+            } else if (rawPatterns != null) {
+                 logger.error("YAML structure mismatch for 'injection_patterns'. Expected List<Map<String, String>> but found {}.", rawPatterns.getClass().getName());
             } else {
-                logger.warn("No 'injection_patterns' found in rules file.");
+                logger.warn("No 'injection_patterns' found in rules file or it's not a list.");
             }
 
-        } catch (Exception e) {
+        } catch (ClassCastException cce) {
+            // This explicit catch might be redundant if the instanceof check is robust, but kept for safety.
+            logger.error("YAML structure mismatch during parsing. Error: {}", cce.getMessage(), cce);
+        }
+        catch (Exception e) {
             logger.error("Failed to load or parse prompt injection rules from: {}", rulesFile.getFilename(), e);
-            // Keep default empty lists/maps in case of error
         }
     }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, List<String>> parseLanguagePatterns(Map<String, Object> patternsMap, String langKeyPrimary, String langKeySecondary) {
-        Map<String, Object> langPatternsObj = (Map<String, Object>) patternsMap.get(langKeyPrimary);
-        if (langPatternsObj == null && langKeySecondary != null) {
-             langPatternsObj = (Map<String, Object>) patternsMap.get(langKeySecondary);
-        }
-
-        if (langPatternsObj != null) {
-            return langPatternsObj.entrySet().stream()
-                .filter(entry -> entry.getValue() instanceof List)
-                .collect(Collectors.toMap(
-                    Map.Entry::getKey,
-                    entry -> (List<String>) entry.getValue(),
-                    (existing, replacement) -> existing // merge function, just in case of duplicate keys
-                ));
-        }
-        logger.warn("No '{}' or '{}' pattern category found in injection_patterns.", langKeyPrimary, langKeySecondary);
-        return Collections.emptyMap();
-    }
-
 
     public List<String> getForbiddenWordsJp() {
         return Collections.unmodifiableList(forbiddenWordsJp);

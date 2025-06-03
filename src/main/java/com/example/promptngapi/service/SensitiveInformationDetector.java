@@ -2,7 +2,11 @@ package com.example.promptngapi.service;
 
 import org.springframework.stereotype.Service;
 import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 import java.util.stream.Stream;
+import java.util.ArrayList;
+import java.util.List;
+import com.example.promptngapi.dto.DetectionDetail;
 
 /**
  * 指定されたテキスト内から様々な種類の機密情報を検出するサービスです。
@@ -64,18 +68,21 @@ public class SensitiveInformationDetector {
     );
 
 
-    // Regex for Japanese My Number (12 digits) - to be used on cleaned text with anchors.
-    private static final Pattern CLEANED_MY_NUMBER_PATTERN = Pattern.compile("^[0-9]{12}$");
+    // Regex for Japanese My Number (12 digits) - for finding in cleaned text.
+    private static final Pattern FIND_IN_CLEANED_MY_NUMBER_PATTERN = Pattern.compile("[0-9]{12}");
+    // The old one for exact matches, kept for reference or if direct validation is ever needed.
+    private static final Pattern CLEANED_MY_NUMBER_PATTERN_ANCHORED = Pattern.compile("^[0-9]{12}$");
+
 
     /**
-     * 指定されたテキストが日本の住所を含む可能性をチェックします。
+     * 指定されたテキストが日本の住所を含む可能性をチェックします。 (プライベートヘルパーメソッド)
      * 注意: これはプレースホルダー実装であり、精度向上のためには大幅な改良が必要です。
      * 現在、キーワードマッチングとテスト用の一時的なASCIIチェックの組み合わせを使用しています。
      *
      * @param text チェックするテキスト。
      * @return 住所の可能性が見つかった場合は {@code true}、それ以外の場合は {@code false}。
      */
-    public boolean isAddress(String text) {
+    private boolean checkJapaneseAddress(String text) { // Renamed to avoid confusion with public methods if any
         if (text == null || text.isEmpty()) {
             return false;
         }
@@ -100,14 +107,14 @@ public class SensitiveInformationDetector {
     }
 
     /**
-     * 指定されたテキストが日本の氏名を含む可能性をチェックします。
+     * 指定されたテキストが日本の氏名を含む可能性をチェックします。 (プライベートヘルパーメソッド)
      * 注意: これはプレースホルダー実装であり、精度向上のためには大幅な改良が必要です。
      * 現在、敬称付きの氏名に対する簡略化されたパターンと、テスト用の一時的なASCIIチェックを使用しています。
      *
      * @param text チェックするテキスト。
      * @return 氏名の可能性が見つかった場合は {@code true}、それ以外の場合は {@code false}。
      */
-    public boolean isName(String text) {
+    private boolean checkJapaneseName(String text) { // Renamed
         if (text == null || text.isEmpty()) {
             return false;
         }
@@ -129,56 +136,70 @@ public class SensitiveInformationDetector {
         return false;
     }
 
-    /**
-     * 指定されたテキストが、クリーニング（スペースとハイフンの除去）後、
-     * 一般的なクレジットカード番号のパターン（Visa, Mastercard, Amex）に一致するかどうかをチェックします。
-     * クリーニングされた文字列全体がカードパターンに一致する必要があります。
-     *
-     * @param text チェックするテキスト。
-     * @return クレジットカード番号が見つかった場合は {@code true}、それ以外の場合は {@code false}。
-     */
-    public boolean isCreditCard(String text) {
-        if (text == null || text.isEmpty()) {
-            return false;
-        }
-        // Remove spaces and hyphens before matching
-        String cleanedText = text.replaceAll("[ -]", "");
-        return STRICT_CREDIT_CARD_PATTERN.matcher(cleanedText).matches();
-    }
-
-    /**
-     * 指定されたテキストが、クリーニング（スペースとハイフンの除去）後、
-     * 12桁の日本のマイナンバー形式に一致するかどうかをチェックします。
-     * クリーニングされた文字列全体が12桁の数値である必要があります。
-     *
-     * @param text チェックするテキスト。
-     * @return マイナンバーが見つかった場合は {@code true}、それ以外の場合は {@code false}。
-     */
-    public boolean isMyNumber(String text) {
-        if (text == null || text.isEmpty()) {
-            return false;
-        }
-        // Clean the text to handle spaces/hyphens, then match exact 12 digits.
-        String cleanedText = text.replaceAll("[ -]", "");
-        return CLEANED_MY_NUMBER_PATTERN.matcher(cleanedText).matches();
-    }
+    // No longer need public boolean isCreditCard and isMyNumber,
+    // their logic will be incorporated into hasSensitiveInformation.
 
     /**
      * 入力テキストが検出可能な機密情報タイプ（住所、氏名、クレジットカード、マイナンバー）の
-     * いずれかを含むかどうかをチェックします。
+     * いずれかを含むかどうかをチェックし、検出された詳細のリストを返します。
      *
      * @param text 分析するテキスト。
-     * @return いずれかの機密情報が検出された場合は {@code true}、それ以外の場合は {@code false}。
+     * @return 検出された機密情報の詳細リスト。問題が見つからない場合は空のリスト。
      */
-    public boolean hasSensitiveInformation(String text) {
+    public List<DetectionDetail> hasSensitiveInformation(String text) {
+        List<DetectionDetail> detectedIssues = new ArrayList<>();
         if (text == null || text.isEmpty()) {
-            return false;
+            return detectedIssues;
         }
-        return Stream.of(
-                isAddress(text),
-                isName(text),
-                isCreditCard(text),
-                isMyNumber(text)
-        ).anyMatch(result -> result);
+
+        // Credit Card Detection
+        String cleanedTextForCards = text.replaceAll("[ -]", "");
+        Matcher cardMatcher = FIND_IN_CLEANED_CREDIT_CARD_PATTERN.matcher(cleanedTextForCards);
+        while (cardMatcher.find()) {
+            detectedIssues.add(new DetectionDetail(
+                "sensitive_info_credit_card",
+                "Credit Card Pattern", // Or FIND_IN_CLEANED_CREDIT_CARD_PATTERN.pattern()
+                cardMatcher.group(),
+                1.0,
+                "Credit card number detected."
+            ));
+        }
+
+        // My Number Detection
+        String cleanedTextForMyNumber = text.replaceAll("[ -]", "");
+        Matcher myNumberMatcher = FIND_IN_CLEANED_MY_NUMBER_PATTERN.matcher(cleanedTextForMyNumber);
+        while (myNumberMatcher.find()) {
+            detectedIssues.add(new DetectionDetail(
+                "sensitive_info_my_number",
+                "My Number Pattern", // Or FIND_IN_CLEANED_MY_NUMBER_PATTERN.pattern()
+                myNumberMatcher.group(),
+                1.0,
+                "My Number detected."
+            ));
+        }
+
+        // Address Detection (Placeholder)
+        if (checkJapaneseAddress(text)) {
+            detectedIssues.add(new DetectionDetail(
+                "sensitive_info_address",
+                "Japanese Address Placeholder Pattern",
+                "該当箇所 (簡易検出のため特定困難)", // Placeholder substring
+                1.0,
+                "Potential Japanese address detected (placeholder logic)."
+            ));
+        }
+
+        // Name Detection (Placeholder)
+        if (checkJapaneseName(text)) {
+            detectedIssues.add(new DetectionDetail(
+                "sensitive_info_name",
+                "Japanese Name Placeholder Pattern",
+                "該当箇所 (簡易検出のため特定困難)", // Placeholder substring
+                1.0,
+                "Potential Japanese name detected (placeholder logic)."
+            ));
+        }
+
+        return detectedIssues;
     }
 }
