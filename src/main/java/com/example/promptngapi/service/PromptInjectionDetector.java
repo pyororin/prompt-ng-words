@@ -23,7 +23,7 @@ import java.util.regex.Matcher;
 public class PromptInjectionDetector {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PromptInjectionDetector.class);
-    private static final double SIMILARITY_THRESHOLD = 0.85;
+    private static final double SIMILARITY_THRESHOLD = 0.7;
 
     // For patterns that are actual regex
     private static final List<Pattern> REGEX_PATTERNS = new ArrayList<>();
