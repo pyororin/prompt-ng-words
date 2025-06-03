@@ -4,6 +4,11 @@ import org.springframework.stereotype.Service;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+/**
+ * 指定されたテキスト内から様々な種類の機密情報を検出するサービスです。
+ * 住所、氏名、クレジットカード番号、日本のマイナンバーの検出器を含みます。
+ * 注意: 日本の住所と氏名の検出はプレースホルダーであり、大幅な改良が必要です。
+ */
 @Service
 public class SensitiveInformationDetector {
 
@@ -62,6 +67,14 @@ public class SensitiveInformationDetector {
     // Regex for Japanese My Number (12 digits) - to be used on cleaned text with anchors.
     private static final Pattern CLEANED_MY_NUMBER_PATTERN = Pattern.compile("^[0-9]{12}$");
 
+    /**
+     * 指定されたテキストが日本の住所を含む可能性をチェックします。
+     * 注意: これはプレースホルダー実装であり、精度向上のためには大幅な改良が必要です。
+     * 現在、キーワードマッチングとテスト用の一時的なASCIIチェックの組み合わせを使用しています。
+     *
+     * @param text チェックするテキスト。
+     * @return 住所の可能性が見つかった場合は {@code true}、それ以外の場合は {@code false}。
+     */
     public boolean isAddress(String text) {
         if (text == null || text.isEmpty()) {
             return false;
@@ -86,6 +99,14 @@ public class SensitiveInformationDetector {
         // return JAPANESE_ADDRESS_PATTERN.matcher(text).matches(); // Full regex version
     }
 
+    /**
+     * 指定されたテキストが日本の氏名を含む可能性をチェックします。
+     * 注意: これはプレースホルダー実装であり、精度向上のためには大幅な改良が必要です。
+     * 現在、敬称付きの氏名に対する簡略化されたパターンと、テスト用の一時的なASCIIチェックを使用しています。
+     *
+     * @param text チェックするテキスト。
+     * @return 氏名の可能性が見つかった場合は {@code true}、それ以外の場合は {@code false}。
+     */
     public boolean isName(String text) {
         if (text == null || text.isEmpty()) {
             return false;
@@ -108,6 +129,14 @@ public class SensitiveInformationDetector {
         return false;
     }
 
+    /**
+     * 指定されたテキストが、クリーニング（スペースとハイフンの除去）後、
+     * 一般的なクレジットカード番号のパターン（Visa, Mastercard, Amex）に一致するかどうかをチェックします。
+     * クリーニングされた文字列全体がカードパターンに一致する必要があります。
+     *
+     * @param text チェックするテキスト。
+     * @return クレジットカード番号が見つかった場合は {@code true}、それ以外の場合は {@code false}。
+     */
     public boolean isCreditCard(String text) {
         if (text == null || text.isEmpty()) {
             return false;
@@ -117,6 +146,14 @@ public class SensitiveInformationDetector {
         return STRICT_CREDIT_CARD_PATTERN.matcher(cleanedText).matches();
     }
 
+    /**
+     * 指定されたテキストが、クリーニング（スペースとハイフンの除去）後、
+     * 12桁の日本のマイナンバー形式に一致するかどうかをチェックします。
+     * クリーニングされた文字列全体が12桁の数値である必要があります。
+     *
+     * @param text チェックするテキスト。
+     * @return マイナンバーが見つかった場合は {@code true}、それ以外の場合は {@code false}。
+     */
     public boolean isMyNumber(String text) {
         if (text == null || text.isEmpty()) {
             return false;
@@ -126,6 +163,13 @@ public class SensitiveInformationDetector {
         return CLEANED_MY_NUMBER_PATTERN.matcher(cleanedText).matches();
     }
 
+    /**
+     * 入力テキストが検出可能な機密情報タイプ（住所、氏名、クレジットカード、マイナンバー）の
+     * いずれかを含むかどうかをチェックします。
+     *
+     * @param text 分析するテキスト。
+     * @return いずれかの機密情報が検出された場合は {@code true}、それ以外の場合は {@code false}。
+     */
     public boolean hasSensitiveInformation(String text) {
         if (text == null || text.isEmpty()) {
             return false;

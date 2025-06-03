@@ -12,6 +12,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Prompt Negative Guard APIのコントローラーです。
+ * 機密情報や潜在的なインジェクション攻撃についてテキストプロンプトを判定するエンドポイントを提供します。
+ */
 @RestController
 @RequestMapping("/prompt-ng/v1")
 public class PromptNGController {
@@ -26,6 +30,14 @@ public class PromptNGController {
         this.promptInjectionDetector = promptInjectionDetector;
     }
 
+    /**
+     * 提供されたテキストに対し、機密情報およびプロンプトインジェクションの試みを判定します。
+     *
+     * @param request 判定対象のテキストを含むリクエストボディ。バリデーションされます。
+     * @return {@link PromptResponse} を含む {@link ResponseEntity}。
+     *         問題が見つからない場合は {@link PromptResponse#result} が {@code true} に、
+     *         機密情報またはプロンプトインジェクションの試みが検出された場合は {@code false} になります。
+     */
     @PostMapping("/judge")
     public ResponseEntity<PromptResponse> judgePrompt(@Valid @RequestBody PromptRequest request) {
         String inputText = request.getText();

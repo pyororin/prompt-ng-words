@@ -1,7 +1,14 @@
 package com.example.promptngapi.dto;
 
+/**
+ * プロンプト判定APIのレスポンスボディを表します。
+ */
 public class PromptResponse {
 
+    /**
+     * プロンプト判定の結果です。
+     * プロンプトが安全かつ有効と見なされる場合は {@code true}、それ以外の場合は {@code false} です。
+     */
     private boolean result;
 
     // Default constructor
