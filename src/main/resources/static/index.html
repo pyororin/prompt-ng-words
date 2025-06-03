@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>プロンプト検査API テストページ</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 600px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        textarea {
+            width: calc(100% - 22px); /* Adjust for padding and border */
+            min-height: 100px;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1em;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #resultArea {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background-color: #e9e9e9;
+            text-align: center;
+            font-size: 1.1em;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .success_ok {
+            color: green;
+            font-weight: bold;
+        }
+        .success_ng {
+            color: orange;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>プロンプト検査API テスト</h1>
+
+        <label for="promptText">検査するテキストを入力してください:</label>
+        <textarea id="promptText" rows="5" placeholder="ここにテキストを入力..."></textarea>
+
+        <button id="judgeButton">判定する</button>
+
+        <div id="resultArea">
+            結果はここに表示されます
+        </div>
+    </div>
+
+    <script>
+        const promptTextArea = document.getElementById('promptText');
+        const judgeButton = document.getElementById('judgeButton');
+        const resultArea = document.getElementById('resultArea');
+
+        judgeButton.addEventListener('click', async () => {
+            const textToJudge = promptTextArea.value;
+            resultArea.textContent = '判定中...';
+            resultArea.className = ''; // Reset classes
+
+            if (!textToJudge.trim()) {
+                resultArea.textContent = 'エラー: テキストを入力してください。';
+                resultArea.classList.add('error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/prompt-ng/v1/judge', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ text: textToJudge })
+                });
+
+                if (!response.ok) {
+                    // Handle HTTP errors like 400, 500 etc.
+                    const errorData = await response.json().catch(() => null); // Try to parse error, may not always be JSON
+                    let errorMessage = `HTTPエラー: ${response.status}`;
+                    if (errorData && errorData.detail) {
+                        errorMessage += ` - ${errorData.detail}`;
+                    } else if (errorData && errorData.message) {
+                         errorMessage += ` - ${errorData.message}`;
+                    }
+                     if (errorData && errorData.errors && errorData.errors.length > 0) {
+                        errorMessage += ` (${errorData.errors[0].defaultMessage || 'Validation failed'})`;
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                const data = await response.json();
+
+                if (data.result === true) {
+                    resultArea.textContent = '結果: OK (問題は見つかりませんでした)';
+                    resultArea.classList.add('success_ok');
+                } else if (data.result === false) {
+                    resultArea.textContent = '結果: NG (問題が検出されました)';
+                    resultArea.classList.add('success_ng');
+                } else {
+                    resultArea.textContent = 'エラー: 不明なレスポンス形式です。';
+                    resultArea.classList.add('error');
+                }
+
+            } catch (error) {
+                console.error('Fetchエラー:', error);
+                resultArea.textContent = `エラー: ${error.message || 'リクエストに失敗しました。'}`;
+                resultArea.classList.add('error');
+            }
+        });
+    </script>
+</body>
+</html>
