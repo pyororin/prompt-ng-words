@@ -56,8 +56,21 @@
             border: 1px solid #eee;
             border-radius: 4px;
             background-color: #e9e9e9;
-            text-align: center;
+            /* text-align: center; */ /* Remove center alignment for multi-line details */
             font-size: 1.1em;
+            padding: 15px; /* Increased padding */
+        }
+        .detection-detail {
+            border-bottom: 1px solid #ddd;
+            padding: 10px 0;
+            text-align: left;
+            font-size: 0.9em;
+        }
+        .detection-detail:last-child {
+            border-bottom: none;
+        }
+        .detection-detail p {
+            margin: 5px 0;
         }
         .error {
             color: red;
@@ -127,17 +140,37 @@
                     throw new Error(errorMessage);
                 }
 
-                const data = await response.json();
+                const data = await response.json(); // data is PromptNGResponse
 
-                if (data.result === true) {
+                resultArea.innerHTML = ''; // Clear previous results
+
+                if (data.overall_result === true) {
                     resultArea.textContent = '結果: OK (問題は見つかりませんでした)';
-                    resultArea.classList.add('success_ok');
-                } else if (data.result === false) {
-                    resultArea.textContent = '結果: NG (問題が検出されました)';
-                    resultArea.classList.add('success_ng');
+                    resultArea.className = 'success_ok';
+                } else if (data.overall_result === false) {
+                    let resultHTML = '<p class="success_ng">結果: NG (問題が検出されました)</p>';
+                    if (data.detections && data.detections.length > 0) {
+                        resultHTML += '<h4>検出された詳細:</h4>';
+                        data.detections.forEach(detection => {
+                            resultHTML += '<div class="detection-detail">';
+                            resultHTML += `<p><strong>タイプ:</strong> ${detection.type || 'N/A'}</p>`;
+                            resultHTML += `<p><strong>一致パターン:</strong> ${detection.matched_pattern || 'N/A'}</p>`;
+                            resultHTML += `<p><strong>入力部分文字列:</strong> ${detection.input_substring || 'N/A'}</p>`;
+                            if (detection.similarity_score != null) {
+                                resultHTML += `<p><strong>類似スコア:</strong> ${detection.similarity_score.toFixed(2)}</p>`;
+                            }
+                            if (detection.details) {
+                                resultHTML += `<p><strong>詳細:</strong> ${detection.details}</p>`;
+                            }
+                            resultHTML += '</div>';
+                        });
+                    }
+                    resultArea.innerHTML = resultHTML;
+                    // Keep overall class for resultArea for general NG styling if needed, or style paragraphs.
+                    // For now, paragraph class handles color.
                 } else {
-                    resultArea.textContent = 'エラー: 不明なレスポンス形式です。';
-                    resultArea.classList.add('error');
+                    resultArea.textContent = 'エラー: 不明なレスポンス形式です。overall_resultが見つかりません。';
+                    resultArea.className = 'error';
                 }
 
             } catch (error) {
