@@ -1,0 +1,3 @@
+score-thresholds:
+  similarity-threshold: 0.7
+  non-japanese-sentence-word-threshold: 3
