@@ -3,7 +3,6 @@ package com.example.promptngapi.controller;
 import com.example.promptngapi.dto.DetectionDetail;
 import com.example.promptngapi.dto.PromptNGResponse;
 import com.example.promptngapi.dto.PromptRequest;
-// import com.example.promptngapi.dto.PromptResponse; // No longer used
 import com.example.promptngapi.service.PromptInjectionDetector;
 import com.example.promptngapi.service.SensitiveInformationDetector;
 import jakarta.validation.Valid;
