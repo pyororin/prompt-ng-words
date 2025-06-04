@@ -1,5 +1,6 @@
 package com.example.promptngapi.service;
 
+import com.example.promptngapi.nlp.KuromojiAnalyzer; // KuromojiAnalyzerをインポート
 import org.apache.tika.langdetect.optimaize.OptimaizeLangDetector;
 import org.apache.tika.language.detect.LanguageDetector;
 import org.apache.tika.language.detect.LanguageResult;
@@ -31,6 +32,7 @@ public class PromptInjectionDetector {
     private static final int NON_JAPANESE_SENTENCE_WORD_THRESHOLD = 3;
     // Apache Tika Optimaize言語検出器のインスタンス。言語モデルをロード済み。
     private static final LanguageDetector langDetector = new OptimaizeLangDetector().loadModels();
+    private final KuromojiAnalyzer kuromojiAnalyzer; // KuromojiAnalyzerのインスタンス
 
     // 正規表現パターンを格納するリスト
     private static final List<Pattern> REGEX_PATTERNS = new ArrayList<>();
@@ -43,8 +45,21 @@ public class PromptInjectionDetector {
     // 禁止されている日本語の単語リスト
     private static final List<String> FORBIDDEN_WORDS_JP = new ArrayList<>();
 
+    // コンストラクタインジェクションを使用
+    public PromptInjectionDetector(KuromojiAnalyzer kuromojiAnalyzer) {
+        this.kuromojiAnalyzer = kuromojiAnalyzer;
+        // loadRulesFromYaml(); // static初期化ブロックから移動させることを検討 (後述)
+    }
+
+    // loadRulesFromYaml は static メソッドなので、ここでは KuromojiAnalyzer を直接使えない。
+    // ルールロード時にNLP処理が必要な場合は、このメソッドの呼び出し方や
+    // ルール格納方法の変更が必要になるが、今回はまず判定時の利用に集中する。
+    // もし loadRulesFromYaml 内で kuromojiAnalyzer を使いたい場合は、
+    // このメソッドを非staticにするか、Analyzerを引数で渡す必要がある。
+    // 今回の改修では、ルールのフレーズは判定時にその都度解析する方針とする。
+
     static {
-        loadRulesFromYaml();
+        loadRulesFromYaml(); // 従来のルールロードはそのまま
     }
 
     @SuppressWarnings("unchecked")
@@ -175,15 +190,26 @@ public class PromptInjectionDetector {
             }
         }
 
-        // 3. リテラルな日本語フレーズをチェック（大文字・小文字を区別する部分文字列の一致）
+        // 3. リテラルな日本語フレーズをチェック（NLPによる正規化と比較）
+        List<String> analyzedInputTextTokens = kuromojiAnalyzer.analyzeText(text); // 入力テキストを解析・正規化
+        String analyzedInputTextForMatching = String.join(" ", analyzedInputTextTokens); // 比較用にスペース区切り文字列に
+
         for (String literalJpnPhrase : LITERAL_JAPANESE_PHRASES) {
-            if (text.contains(literalJpnPhrase)) {
+            List<String> analyzedRulePhraseTokens = kuromojiAnalyzer.analyzeText(literalJpnPhrase); // ルールフレーズを解析・正規化
+            if (analyzedRulePhraseTokens.isEmpty()) { // ルールフレーズが解析の結果空になる場合はスキップ
+                continue;
+            }
+            String analyzedRulePhraseForMatching = String.join(" ", analyzedRulePhraseTokens);
+
+            // 正規化された入力テキストに、正規化されたルールフレーズが含まれているかチェック
+            // より洗練された方法として、単語リストのサブシーケンス判定なども考えられる
+            if (analyzedInputTextForMatching.contains(analyzedRulePhraseForMatching)) {
                 detectedIssues.add(new DetectionDetail(
-                    "prompt_injection_phrase_ja",
-                    literalJpnPhrase,
-                    literalJpnPhrase, // 部分文字列はフレーズ自体
-                    1.0,
-                    "日本語のフレーズに完全一致しました。"
+                    "prompt_injection_phrase_ja_nlp", // タイプ名を変更してNLP処理経由であることを示す
+                    literalJpnPhrase,                 // 元のルールフレーズ
+                    analyzedRulePhraseForMatching,    // マッチした正規化後のルールフレーズ (または関連する部分)
+                    1.0,                              // スコア (必要に応じて調整)
+                    "日本語のフレーズにNLP処理後の正規化文字列で一致しました。"
                 ));
             }
         }
@@ -202,31 +228,40 @@ public class PromptInjectionDetector {
             }
         }
 
-        // 5. オリジナルフレーズに対するJaro-Winkler類似度チェック
-        // これは最後に行われ、注意深く扱わないと既存の検出に追加される可能性がある。
-        // 現時点では、見逃しを防ぐためにスコアが高い場合に追加する。
-        // この相互作用の重複排除や改良は将来のステップとなる可能性がある。
+        // 5. オリジナルフレーズに対するJaro-Winkler類似度チェック (NLPで正規化後)
         JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
+        // analyzedInputTextForMatching は既にこのメソッドの冒頭で日本語リテラルチェックのために生成されているものを再利用
+
         for (String originalPhrase : ORIGINAL_PHRASES_FOR_SIMILARITY) {
-            double score = jaroWinkler.apply(text, originalPhrase); // 完全な入力テキストとオリジナルフレーズを比較
+            List<String> analyzedRulePhraseTokens = kuromojiAnalyzer.analyzeText(originalPhrase);
+            if (analyzedRulePhraseTokens.isEmpty()) {
+                continue; // 正規化の結果、ルールフレーズが空になった場合はスキップ
+            }
+            String analyzedRulePhraseForSimilarity = String.join(" ", analyzedRulePhraseTokens);
+
+            // 正規化された文字列同士で類似度を計算
+            double score = jaroWinkler.apply(analyzedInputTextForMatching, analyzedRulePhraseForSimilarity);
+
             if (score >= SIMILARITY_THRESHOLD) {
-                // この *同じオリジナルフレーズ* がリテラルチェックで既に完全一致として見つかっている場合は追加を避ける
-                boolean alreadyFoundExact = false;
+                boolean alreadyFoundExactOrNlpLiteral = false;
                 for (DetectionDetail detail : detectedIssues) {
-                    if (detail.getMatched_pattern().equalsIgnoreCase(originalPhrase) && detail.getSimilarity_score() != null && detail.getSimilarity_score() == 1.0) {
-                        alreadyFoundExact = true;
+                    // 完全一致またはNLPによるリテラル一致で既に見つかっているかチェック
+                    // detail.getMatched_pattern() は元のルールフレーズ
+                    // detail.getInput_substring() はNLPリテラルマッチの場合、正規化後のルールフレーズが入っている
+                    if ( (detail.getMatched_pattern().equalsIgnoreCase(originalPhrase) && detail.getSimilarity_score() != null && detail.getSimilarity_score() == 1.0) ||
+                         (detail.getType().equals("prompt_injection_phrase_ja_nlp") && detail.getMatched_pattern().equalsIgnoreCase(originalPhrase)) ) {
+                        alreadyFoundExactOrNlpLiteral = true;
                         break;
                     }
                 }
-                if (!alreadyFoundExact) {
-                     // 類似度の場合、input_substringは全文、またはスニペットになる可能性がある。
-                     // 簡単のため、現時点ではオリジナルフレーズを「見つかった」部分文字列として使用する。
+
+                if (!alreadyFoundExactOrNlpLiteral) {
                     detectedIssues.add(new DetectionDetail(
-                        "prompt_injection_similarity",
-                        originalPhrase,
-                        text, // またはテキストが長すぎる場合は関連するスニペットを見つける
+                        "prompt_injection_similarity_nlp", // タイプ名を変更
+                        originalPhrase,                     // 元のルールフレーズ
+                        analyzedRulePhraseForSimilarity,    // 比較に使用した正規化後のルールフレーズ
                         score,
-                        "既知のインジェクションフレーズとの類似度が高いです。"
+                        "既知のインジェクションフレーズとの類似度が高いです（NLP正規化後）。"
                     ));
                 }
             }
