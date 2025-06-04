@@ -59,18 +59,21 @@ public class KuromojiAnalyzer {
                     String chosenText;
 
                     // Normalization Logic
-                    // Prefer reading if it's available and seems to be Katakana
-                    if (reading != null && !reading.isEmpty() && isKatakana(reading.substring(0, 1))) {
+                    // 1. If the surface form is already fully Katakana, use it.
+                    if (isKatakana(surface)) {
+                        chosenText = surface;
+                    // 2. Else, if the reading is available and fully Katakana, use the reading.
+                    } else if (reading != null && !reading.isEmpty() && isKatakana(reading)) {
                         chosenText = reading;
+                    // 3. Else, for verbs and adjectives, use the base form if available.
+                    } else if (("動詞".equals(partOfSpeech) || "形容詞".equals(partOfSpeech)) && baseForm != null && !baseForm.equals("*")) {
+                        chosenText = baseForm;
+                    // 4. Otherwise, use the surface form.
                     } else {
-                        // Otherwise, use baseForm if available and not "*", else use surface
-                        if (("動詞".equals(partOfSpeech) || "形容詞".equals(partOfSpeech)) && baseForm != null && !baseForm.equals("*")) {
-                            chosenText = baseForm;
-                        } else {
-                            chosenText = surface;
-                        }
+                        chosenText = surface;
                     }
-                    // Convert the chosen text to Katakana
+
+                    // Convert the final chosen text to Katakana (this handles Hiragana in baseForm/surface if selected)
                     return convertToKatakana(chosenText);
                 })
                 .collect(Collectors.toList());
@@ -80,10 +83,15 @@ public class KuromojiAnalyzer {
         if (text == null || text.isEmpty()) {
             return false;
         }
-        // Check if the first character is Katakana (Unicode range U+30A0 to U+30FF)
-        // Includes ゠ (U+30A0) to ヿ (U+30FF)
-        char firstChar = text.charAt(0);
-        return firstChar >= '\u30A0' && firstChar <= '\u30FF';
+        for (char c : text.toCharArray()) {
+            // Check if the character is Katakana (Unicode range U+30A0 to U+30FF)
+            // Includes ゠ (U+30A0) to ヿ (U+30FF)
+            // Excludes half-width Katakana (U+FF65 to U+FF9F)
+            if (!(c >= '\u30A0' && c <= '\u30FF')) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

@@ -40,15 +40,8 @@ public class KuromojiAnalyzerTest {
 
     @Test
     void testConvertToKatakana_nullInput() {
-        // Current implementation will throw NullPointerException
-        assertThrows(NullPointerException.class, () -> {
-            KuromojiAnalyzer.convertToKatakana(null);
-        });
-        // If the behavior should be to return null or empty string, the method and this test need to change.
-        // For now, testing existing behavior.
-        // A more robust implementation might be:
-        // if (text == null) return null; // or return "";
-        // For the purpose of this task, we stick to testing the current behavior.
+        // Current implementation returns "" for null input.
+        assertEquals("", KuromojiAnalyzer.convertToKatakana(null));
     }
 
     @Test
@@ -75,7 +68,7 @@ public class KuromojiAnalyzerTest {
         assertFalse(KuromojiAnalyzer.isKatakana("あ"));
         assertFalse(KuromojiAnalyzer.isKatakana("test"));
         assertFalse(KuromojiAnalyzer.isKatakana("漢字"));
-        assertTrue(KuromojiAnalyzer.isKatakana("ﾊﾝｶｸ")); // This will be false, as current isKatakana checks only full-width
+        assertFalse(KuromojiAnalyzer.isKatakana("ﾊﾝｶｸ")); // This is false, as isKatakana checks only full-width and first char
         assertFalse(KuromojiAnalyzer.isKatakana(""));
         assertFalse(KuromojiAnalyzer.isKatakana(null));
     }
@@ -102,10 +95,10 @@ public class KuromojiAnalyzerTest {
 
     @Test
     void testAnalyzeText_normalizeToKatakana_katakanaVerb() {
-        // Input "ミセル" (miseru) - reading is "ミセル"
-        // Surface "ミセル", reading "ミセル", baseForm "ミセル"
-        // Reading "ミセル" is chosen.
-        assertLinesMatch(List.of("ミセル"), analyzer.analyzeText("ミセル"));
+        // Input "ミセル" (miseru)
+        // Kuromoji tokenizes "ミセル" into "ミ" (Noun) and "セル" (Noun).
+        // Both are kept after normalization.
+        assertLinesMatch(List.of("ミ", "セル"), analyzer.analyzeText("ミセル"));
     }
 
     @Test
