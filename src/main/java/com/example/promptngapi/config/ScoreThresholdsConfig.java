@@ -2,18 +2,23 @@ package com.example.promptngapi.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
-import jakarta.validation.constraints.NotNull; // Added import
+import jakarta.validation.constraints.NotNull;
 
+/**
+ * スコアリングの閾値設定を保持するクラス。
+ * これらの設定は `score_thresholds.yaml` ファイルからロードされます。
+ */
 @Configuration
 @ConfigurationProperties(prefix = "score-thresholds")
 public class ScoreThresholdsConfig {
 
     @NotNull
-    private Double similarityThreshold; // Changed to Double to allow null for validation
-    @NotNull
-    private Integer nonJapaneseSentenceWordThreshold; // Changed to Integer to allow null for validation
+    private Double similarityThreshold; // Jaro-Winkler類似度チェックの閾値
 
-    public Double getSimilarityThreshold() { // Changed return type
+    @NotNull
+    private Integer nonJapaneseSentenceWordThreshold; // 非日本語の文章と判定するための単語数の閾値
+
+    public Double getSimilarityThreshold() {
         return similarityThreshold;
     }
 
@@ -21,11 +26,11 @@ public class ScoreThresholdsConfig {
         this.similarityThreshold = similarityThreshold;
     }
 
-    public Integer getNonJapaneseSentenceWordThreshold() { // Changed return type
+    public Integer getNonJapaneseSentenceWordThreshold() {
         return nonJapaneseSentenceWordThreshold;
     }
 
-    public void setNonJapaneseSentenceWordThreshold(Integer nonJapaneseSentenceWordThreshold) { // Changed parameter type
+    public void setNonJapaneseSentenceWordThreshold(Integer nonJapaneseSentenceWordThreshold) {
         this.nonJapaneseSentenceWordThreshold = nonJapaneseSentenceWordThreshold;
     }
 }
