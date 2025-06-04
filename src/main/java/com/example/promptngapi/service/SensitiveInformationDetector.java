@@ -162,7 +162,8 @@ public class SensitiveInformationDetector {
                 "Credit Card Pattern", // Or FIND_IN_CLEANED_CREDIT_CARD_PATTERN.pattern()
                 cardMatcher.group(),
                 1.0, // Exact match for a defined pattern
-                "Credit card number detected."
+                "Credit card number detected.",
+                text // original_text_full
             ));
         }
 
@@ -175,7 +176,8 @@ public class SensitiveInformationDetector {
                 "My Number Pattern", // Or FIND_IN_CLEANED_MY_NUMBER_PATTERN.pattern()
                 myNumberMatcher.group(),
                 1.0, // Exact match for a defined pattern
-                "My Number detected."
+                "My Number detected.",
+                text // original_text_full
             ));
         }
 
@@ -185,8 +187,9 @@ public class SensitiveInformationDetector {
                 "sensitive_info_address",
                 "Japanese Address Placeholder Pattern",
                 "該当箇所 (簡易検出のため特定困難)", // Placeholder substring
-                0.7,
-                "Potential Japanese address detected (placeholder logic)."
+                0.7, // Score might be lower for placeholder logic
+                "Potential Japanese address detected (placeholder logic).",
+                text // original_text_full
             ));
         }
 
@@ -196,8 +199,9 @@ public class SensitiveInformationDetector {
                 "sensitive_info_name",
                 "Japanese Name Placeholder Pattern",
                 "該当箇所 (簡易検出のため特定困難)", // Placeholder substring
-                0.7,
-                "Potential Japanese name detected (placeholder logic)."
+                0.7, // Score might be lower for placeholder logic
+                "Potential Japanese name detected (placeholder logic).",
+                text // original_text_full
             ));
         }
 

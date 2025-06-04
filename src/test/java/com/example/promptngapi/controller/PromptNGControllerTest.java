@@ -69,7 +69,7 @@ public class PromptNGControllerTest {
 
     @Test
     void judgePrompt_onlySensitiveInfoIssue_shouldReturnOverallFalseAndSensitiveInfoDetails() throws Exception {
-        DetectionDetail sensitiveDetail = new DetectionDetail("sensitive_info_test", "test_pattern_sens", "test_input_sens", 1.0, "Sensitive info test details");
+        DetectionDetail sensitiveDetail = new DetectionDetail("sensitive_info_test", "test_pattern_sens", "test_input_sens", 1.0, "Sensitive info test details", "test_input_sens");
         when(sensitiveInformationDetectorMock.hasSensitiveInformation(anyString())).thenReturn(List.of(sensitiveDetail));
         when(promptInjectionDetectorMock.isPromptInjectionAttempt(anyString())).thenReturn(Collections.emptyList());
 
@@ -91,7 +91,7 @@ public class PromptNGControllerTest {
 
     @Test
     void judgePrompt_onlyInjectionIssue_shouldReturnOverallFalseAndInjectionDetails() throws Exception {
-        DetectionDetail injectionDetail = new DetectionDetail("prompt_injection_test", "test_pattern_inj", "test_input_inj", 1.0, "Injection test details");
+        DetectionDetail injectionDetail = new DetectionDetail("prompt_injection_test", "test_pattern_inj", "test_input_inj", 1.0, "Injection test details", "test_input_inj");
         when(sensitiveInformationDetectorMock.hasSensitiveInformation(anyString())).thenReturn(Collections.emptyList());
         when(promptInjectionDetectorMock.isPromptInjectionAttempt(anyString())).thenReturn(List.of(injectionDetail));
 
@@ -111,8 +111,8 @@ public class PromptNGControllerTest {
 
     @Test
     void judgePrompt_bothIssues_shouldReturnOverallFalseAndCombinedDetails() throws Exception {
-        DetectionDetail sensitiveDetail = new DetectionDetail("sensitive_info_test", "s_pattern", "s_input", 1.0, "Sensitive");
-        DetectionDetail injectionDetail = new DetectionDetail("injection_test", "i_pattern", "i_input", 1.0, "Injection");
+        DetectionDetail sensitiveDetail = new DetectionDetail("sensitive_info_test", "s_pattern", "s_input", 1.0, "Sensitive", "s_input");
+        DetectionDetail injectionDetail = new DetectionDetail("injection_test", "i_pattern", "i_input", 1.0, "Injection", "i_input");
 
         when(sensitiveInformationDetectorMock.hasSensitiveInformation(anyString())).thenReturn(List.of(sensitiveDetail));
         when(promptInjectionDetectorMock.isPromptInjectionAttempt(anyString())).thenReturn(List.of(injectionDetail));
