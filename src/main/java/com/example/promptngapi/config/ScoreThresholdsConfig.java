@@ -13,10 +13,10 @@ import jakarta.validation.constraints.NotNull;
 public class ScoreThresholdsConfig {
 
     @NotNull
-    private Double similarityThreshold = 0.7; // Jaro-Winkler類似度チェックの閾値 (デフォルト値)
+    private Double similarityThreshold; // Jaro-Winkler類似度チェックの閾値
 
     @NotNull
-    private Integer nonJapaneseSentenceWordThreshold = 3; // 非日本語の文章と判定するための単語数の閾値 (デフォルト値)
+    private Integer nonJapaneseSentenceWordThreshold; // 非日本語の文章と判定するための単語数の閾値
 
     public Double getSimilarityThreshold() {
         return similarityThreshold;
