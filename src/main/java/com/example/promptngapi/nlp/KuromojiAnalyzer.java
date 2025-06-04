@@ -52,18 +52,38 @@ public class KuromojiAnalyzer {
                 })
                 .map(token -> {
                     String partOfSpeech = token.getPartOfSpeechLevel1();
-                    String baseForm = token.getBaseForm(); // 原形（活用しない語ではnullになることがある）
-                    String surface = token.getSurface();   // 表層形
+                    String baseForm = token.getBaseForm();
+                    String surface = token.getSurface();
+                    String reading = token.getReading();
 
-                    // 動詞と形容詞は原形を使用する
-                    if ("動詞".equals(partOfSpeech) || "形容詞".equals(partOfSpeech)) {
-                        return (baseForm != null && !baseForm.equals("*")) ? baseForm : surface;
+                    String chosenText;
+
+                    // Normalization Logic
+                    // Prefer reading if it's available and seems to be Katakana
+                    if (reading != null && !reading.isEmpty() && isKatakana(reading.substring(0, 1))) {
+                        chosenText = reading;
+                    } else {
+                        // Otherwise, use baseForm if available and not "*", else use surface
+                        if (("動詞".equals(partOfSpeech) || "形容詞".equals(partOfSpeech)) && baseForm != null && !baseForm.equals("*")) {
+                            chosenText = baseForm;
+                        } else {
+                            chosenText = surface;
+                        }
                     }
-                    // 名詞などはそのまま表層形を使用する（必要に応じて正規化処理を追加）
-                    // 例えば、名詞の異表記正規化（例：「コンピュータ」と「コンピューター」）は別途辞書やロジックが必要
-                    return surface;
+                    // Convert the chosen text to Katakana
+                    return convertToKatakana(chosenText);
                 })
                 .collect(Collectors.toList());
+    }
+
+    public static boolean isKatakana(String text) {
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+        // Check if the first character is Katakana (Unicode range U+30A0 to U+30FF)
+        // Includes ゠ (U+30A0) to ヿ (U+30FF)
+        char firstChar = text.charAt(0);
+        return firstChar >= '\u30A0' && firstChar <= '\u30FF';
     }
 
     /**
@@ -92,4 +112,23 @@ public class KuromojiAnalyzer {
     }
 
     // 必要に応じて、同義語処理やさらなる正規化処理メソッドをここに追加できます。
+
+    public static String convertToKatakana(String text) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (char c : text.toCharArray()) {
+            // Check if the character is Hiragana (Unicode range U+3040 to U+309F)
+            // Includes ぀ (U+3040) to ゟ (U+309F)
+            if (c >= '\u3040' && c <= '\u309F') {
+                // Convert Hiragana to Katakana by adding 0x60
+                sb.append((char) (c + 0x60));
+            } else {
+                // Keep other characters (Katakana, Kanji, alphanumeric, symbols) as they are
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
 }
