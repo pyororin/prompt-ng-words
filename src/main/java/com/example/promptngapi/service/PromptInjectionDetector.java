@@ -132,19 +132,6 @@ public class PromptInjectionDetector {
     }
 
 
-    // ハードコードされたフレーズ用の古い静的ブロック - diffによって削除される予定
-    /*
-    static {
-        // Initialize known prompt injection phrases.
-        // "命令" means command/instruction
-        // "無視" means ignore
-        // "開示" means disclose
-        // "漏洩" means leakage/disclosure
-        // "実行" means execute/run
-    );
-    */
-
-
     /**
      * 指定されたテキストに、既知のプロンプトインジェクションの試み、禁止単語、または非日本語の文章が含まれているかをチェックし、
      * 検出されたすべての問題の詳細リストを返します。
