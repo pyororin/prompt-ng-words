@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 import com.example.promptngapi.dto.DetectionDetail;
+import com.example.promptngapi.config.ScoreThresholdsConfig; // Added import
 import java.util.regex.Matcher;
 
 /**
@@ -27,12 +28,10 @@ import java.util.regex.Matcher;
 public class PromptInjectionDetector {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PromptInjectionDetector.class);
-    private static final double SIMILARITY_THRESHOLD = 0.7; // Jaro-Winkler類似度チェックの閾値
-    // 非日本語の文章と判定するための単語数の閾値。この値より多い単語数を持つ非日本語の文章が検出対象。
-    private static final int NON_JAPANESE_SENTENCE_WORD_THRESHOLD = 3;
     // Apache Tika Optimaize言語検出器のインスタンス。言語モデルをロード済み。
     private static final LanguageDetector langDetector = new OptimaizeLangDetector().loadModels();
     private final KuromojiAnalyzer kuromojiAnalyzer; // KuromojiAnalyzerのインスタンス
+    private final ScoreThresholdsConfig scoreThresholdsConfig; // Added field
 
     // 正規表現パターンを格納するリスト
     private static final List<Pattern> REGEX_PATTERNS = new ArrayList<>();
@@ -46,8 +45,10 @@ public class PromptInjectionDetector {
     private static final List<String> FORBIDDEN_WORDS_JP = new ArrayList<>();
 
     // コンストラクタインジェクションを使用
-    public PromptInjectionDetector(KuromojiAnalyzer kuromojiAnalyzer) {
+    public PromptInjectionDetector(KuromojiAnalyzer kuromojiAnalyzer, ScoreThresholdsConfig scoreThresholdsConfig) {
         this.kuromojiAnalyzer = kuromojiAnalyzer;
+        // ScoreThresholdsConfig をインジェクションして閾値を提供
+        this.scoreThresholdsConfig = scoreThresholdsConfig;
         // loadRulesFromYaml(); // static初期化ブロックから移動させることを検討 (後述)
     }
 
@@ -234,7 +235,8 @@ public class PromptInjectionDetector {
             // 正規化された文字列同士で類似度を計算
             double score = jaroWinkler.apply(analyzedInputTextForMatching, analyzedRulePhraseForSimilarity);
 
-            if (score >= SIMILARITY_THRESHOLD) {
+            // 設定ファイルから取得した類似度閾値を使用
+            if (score >= scoreThresholdsConfig.getSimilarityThreshold()) {
                 boolean alreadyFoundExactOrNlpLiteral = false;
                 for (DetectionDetail detail : detectedIssues) {
                     // 完全一致またはNLPによるリテラル一致で既に見つかっているかチェック
@@ -294,8 +296,9 @@ public class PromptInjectionDetector {
         if (!"ja".equals(language)) {
             // テキストを単語に分割
             int wordCount = text.trim().split("\\s+").length;
+            // 設定ファイルから取得した非日本語文章の単語数閾値を使用
             // 単語数が閾値を超えていれば、非日本語の文章と判定
-            return wordCount > NON_JAPANESE_SENTENCE_WORD_THRESHOLD;
+            return wordCount > scoreThresholdsConfig.getNonJapaneseSentenceWordThreshold();
         }
         // 言語が日本語であるか、または日本語でなくても単語数が閾値以下であれば false
         return false;
