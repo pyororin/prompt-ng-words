@@ -10,9 +10,9 @@ import org.yaml.snakeyaml.Yaml;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.commons.text.similarity.JaroWinklerSimilarity;
 import com.example.promptngapi.dto.DetectionDetail;
 import java.util.regex.Matcher;
+import java.io.IOException; // Added for NlpSimilarityService
 
 /**
  * 指定されたテキスト内の潜在的なプロンプトインジェクションの試みを検出するサービスです。
@@ -23,7 +23,9 @@ import java.util.regex.Matcher;
 public class PromptInjectionDetector {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PromptInjectionDetector.class);
-    private static final double SIMILARITY_THRESHOLD = 0.7;
+    private static final double SIMILARITY_THRESHOLD = 0.7; // This might need adjustment for NLP similarity
+
+    private final NlpSimilarityService nlpSimilarityService;
 
     // For patterns that are actual regex
     private static final List<Pattern> REGEX_PATTERNS = new ArrayList<>();
@@ -33,6 +35,12 @@ public class PromptInjectionDetector {
     // Stores original phrases for similarity checks if they are not regex
     private static final List<String> ORIGINAL_PHRASES_FOR_SIMILARITY = new ArrayList<>();
     private static final List<String> FORBIDDEN_WORDS_JP = new ArrayList<>();
+
+    // Constructor for Spring dependency injection
+    public PromptInjectionDetector(NlpSimilarityService nlpSimilarityService) {
+        this.nlpSimilarityService = nlpSimilarityService;
+        // Static block for loading rules will be called when class is loaded.
+    }
 
     static {
         loadRulesFromYaml();
@@ -193,33 +201,34 @@ public class PromptInjectionDetector {
             }
         }
 
-        // 5. Jaro-Winkler Similarity Check for original phrases
-        // This is done last and could potentially add to existing detections if not handled carefully.
-        // For now, we will add if score is high, focusing on not missing things.
-        // Deduplication or refining this interaction can be a future step.
-        JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
+        // 5. NLP Similarity Check for original phrases
+        // This is done last and could potentially add to existing detections.
         for (String originalPhrase : ORIGINAL_PHRASES_FOR_SIMILARITY) {
-            double score = jaroWinkler.apply(text, originalPhrase); // Compare full input text with original phrase
-            if (score >= SIMILARITY_THRESHOLD) {
-                // Avoid adding if an exact match for this *same originalPhrase* was already found by literal checks
-                boolean alreadyFoundExact = false;
-                for (DetectionDetail detail : detectedIssues) {
-                    if (detail.getMatched_pattern().equalsIgnoreCase(originalPhrase) && detail.getSimilarity_score() != null && detail.getSimilarity_score() == 1.0) {
-                        alreadyFoundExact = true;
-                        break;
+            try {
+                double score = nlpSimilarityService.calculateSimilarity(text, originalPhrase);
+                if (score >= SIMILARITY_THRESHOLD) { // SIMILARITY_THRESHOLD might need adjustment for NLP
+                    // Avoid adding if an exact match for this *same originalPhrase* was already found by literal checks
+                    boolean alreadyFoundExact = false;
+                    for (DetectionDetail detail : detectedIssues) {
+                        if (detail.getMatched_pattern().equalsIgnoreCase(originalPhrase) && detail.getSimilarity_score() != null && detail.getSimilarity_score() == 1.0) {
+                            alreadyFoundExact = true;
+                            break;
+                        }
+                    }
+                    if (!alreadyFoundExact) {
+                        detectedIssues.add(new DetectionDetail(
+                            "prompt_injection_nlp_similarity", // Changed type
+                            originalPhrase,
+                            text, // Using full text as input_substring for now
+                            score,
+                            "High NLP-based similarity to known injection phrase." // Updated description
+                        ));
                     }
                 }
-                if (!alreadyFoundExact) {
-                     // For similarity, input_substring could be the whole text, or a snippet.
-                     // For simplicity, using the original phrase as the "found" substring for now.
-                    detectedIssues.add(new DetectionDetail(
-                        "prompt_injection_similarity",
-                        originalPhrase,
-                        text, // Or find a relevant snippet if text is too long
-                        score,
-                        "High similarity to known injection phrase."
-                    ));
-                }
+            } catch (IOException e) {
+                LOGGER.error("Error calculating NLP similarity for phrase '{}' against text snippet (first 100chars): '{}'. Error: {}", originalPhrase, text.substring(0, Math.min(text.length(),100)), e.getMessage());
+                // Optionally, add a specific DetectionDetail for the error if required by business logic
+                // For now, just logging the error.
             }
         }
         // TODO: Consider deduplication logic here if multiple patterns (e.g., exact and similarity) match the same input part.
