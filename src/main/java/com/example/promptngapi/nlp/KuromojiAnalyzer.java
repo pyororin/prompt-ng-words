@@ -4,6 +4,7 @@ import com.atilika.kuromoji.ipadic.Token;
 import com.atilika.kuromoji.ipadic.Tokenizer;
 import org.springframework.stereotype.Component; // Componentをインポート
 
+import java.util.ArrayList; // Added import
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -138,5 +139,113 @@ public class KuromojiAnalyzer {
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * 指定されたテキストを句に分割します。
+     * 句は句読点（。、！、？）または文末助詞（「です」、「ます」など）で区切られます。
+     *
+     * @param text 分割するテキスト
+     * @return 句のリスト
+     */
+    public List<String> splitIntoPhrases(String text) {
+        if (text == null || text.isEmpty()) {
+            return List.of();
+        }
+
+        List<Token> tokens = tokenize(text);
+        if (tokens.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> phrases = new ArrayList<>();
+        StringBuilder currentPhrase = new StringBuilder();
+        boolean sentenceEndingParticleFound = false;
+
+        for (int i = 0; i < tokens.size(); i++) {
+            Token token = tokens.get(i);
+            String surface = token.getSurface();
+            String pos1 = token.getPartOfSpeechLevel1(); // 品詞レベル1
+            String pos2 = token.getPartOfSpeechLevel2(); // 品詞レベル2
+
+            currentPhrase.append(surface);
+
+            boolean isPunctuation = "。、！？".contains(surface);
+            boolean isDesuMasu = (surface.equals("です") || surface.equals("ます")) && "助動詞".equals(pos1);
+
+            if (isPunctuation) {
+                // Look ahead for IDENTICAL consecutive punctuation.
+                // currentPhrase already contains the first punctuation mark (surface).
+                if (surface.length() == 1) { // Common case: single character punctuation
+                    char firstPunctuationChar = surface.charAt(0);
+                    while (i + 1 < tokens.size() &&
+                           tokens.get(i + 1).getSurface().length() == 1 &&
+                           tokens.get(i + 1).getSurface().charAt(0) == firstPunctuationChar &&
+                           "。、！？".contains(tokens.get(i + 1).getSurface())) { // Redundant check for safety but good
+                        i++;
+                        token = tokens.get(i);
+                        currentPhrase.append(token.getSurface());
+                    }
+                }
+                // If Kuromoji tokenizes "!!" as a single token, or for other multi-char punctuation,
+                // the above loop might not run or apply. The current token is already appended.
+                phrases.add(currentPhrase.toString());
+                currentPhrase.setLength(0);
+                sentenceEndingParticleFound = false;
+                continue;
+            }
+
+            if (isDesuMasu) {
+                sentenceEndingParticleFound = true;
+                // Check if this is the last token
+                if (i == tokens.size() - 1) {
+                    phrases.add(currentPhrase.toString());
+                    currentPhrase.setLength(0);
+                    sentenceEndingParticleFound = false;
+                }
+                continue;
+            }
+
+            // If a sentence-ending particle was found, and the current token is not an auxiliary verb or punctuation,
+            // then the phrase ends after "です" or "ます".
+            if (sentenceEndingParticleFound) {
+                // Consider what tokens can follow です/ます without starting a new phrase immediately.
+                // For example, 助詞 (particles like ね, よ) or some 助動詞 might extend the phrase.
+                // If it's a noun, verb, adjective, or adverb, it likely starts a new phrase.
+                // This logic might need refinement based on specific linguistic rules.
+                boolean startsNewPhrase = !("助動詞".equals(pos1) || "助詞".equals(pos1) || "記号".equals(pos1) || ("名詞".equals(pos1) && "サ変接続".equals(pos2)));
+
+
+                if (startsNewPhrase) {
+                    // The previous phrase ended at "です" or "ます".
+                    // We need to backtrack to where "です" or "ます" ended.
+                    String fullPhrase = currentPhrase.toString();
+                    int splitPoint = fullPhrase.lastIndexOf(surface); // find the current token's start
+
+                    if (splitPoint > 0) { // Ensure there was something before the current token
+                        // Find the end of the previous token (e.g. "ます")
+                        Token prevToken = tokens.get(i-1);
+                        String prevTokenSurface = prevToken.getSurface();
+                        int desuMasuEndIndex = fullPhrase.substring(0, splitPoint).lastIndexOf(prevTokenSurface) + prevTokenSurface.length();
+
+                        phrases.add(fullPhrase.substring(0, desuMasuEndIndex));
+                        currentPhrase.setLength(0);
+                        currentPhrase.append(fullPhrase.substring(desuMasuEndIndex));
+                    } else {
+                        // This case should ideally not happen if です/ます was correctly identified.
+                        // Or it implies です/ます was the start of the currentPhrase buffer.
+                        // Fallback: treat the current token as starting a new phrase if necessary.
+                        // For now, we assume the previous logic handles the split correctly.
+                    }
+                }
+                 sentenceEndingParticleFound = false; // Reset after checking the token following です/ます
+            }
+        }
+
+        if (currentPhrase.length() > 0) {
+            phrases.add(currentPhrase.toString());
+        }
+
+        return phrases;
     }
 }

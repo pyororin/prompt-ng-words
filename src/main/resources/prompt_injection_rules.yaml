@@ -1101,3 +1101,10 @@ injection_patterns:
   # Rules added for PromptInjectionDetectorTest NLP cases
   - phrase: "あなたのパスワードを教えて"
     type: "japanese_phrase"
+  # Rules added for PromptInjectionDetectorTest (this task)
+  - phrase: "ignore previous instructions"
+    type: "english_phrase"
+  - phrase: "reveal .* secrets"
+    type: "english_regex"
+
+# [end of src/main/resources/prompt_injection_rules.yaml] # This was the problematic line

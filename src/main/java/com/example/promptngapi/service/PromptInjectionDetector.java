@@ -60,11 +60,26 @@ public class PromptInjectionDetector {
     // 今回の改修では、ルールのフレーズは判定時にその都度解析する方針とする。
 
     static {
-        loadRulesFromYaml(); // 従来のルールロードはそのまま
+        loadRulesForTesting(); // Call the new public method which includes clearing and loading
+    }
+
+    /**
+     * Clears all rule lists and reloads them from the YAML file.
+     * Intended for use in testing to ensure a clean rule state.
+     */
+    public static void loadRulesForTesting() {
+        // Clear all static rule lists
+        REGEX_PATTERNS.clear();
+        LITERAL_ENGLISH_PHRASES.clear();
+        LITERAL_JAPANESE_PHRASES.clear();
+        ORIGINAL_PHRASES_FOR_SIMILARITY.clear();
+        FORBIDDEN_WORDS_JP.clear();
+
+        doLoadRulesFromYaml(); // Call the actual loading logic
     }
 
     @SuppressWarnings("unchecked")
-    private static void loadRulesFromYaml() {
+    private static void doLoadRulesFromYaml() { // Renamed from loadRulesFromYaml
         Yaml yaml = new Yaml();
         try (InputStream inputStream = PromptInjectionDetector.class.getClassLoader().getResourceAsStream("prompt_injection_rules.yaml")) {
             if (inputStream == null) {
@@ -144,135 +159,166 @@ public class PromptInjectionDetector {
      * @param text チェックする入力テキスト。
      * @return 検出されたすべてのインジェクション試みやその他の問題の詳細リスト。問題が見つからない場合は空のリスト。
      */
-    public List<DetectionDetail> isPromptInjectionAttempt(String text) {
-        List<DetectionDetail> detectedIssues = new ArrayList<>();
-        if (text == null || text.isEmpty()) {
-            return detectedIssues;
+    public List<DetectionDetail> isPromptInjectionAttempt(String originalFullText) {
+        List<DetectionDetail> allDetectedIssues = new ArrayList<>();
+        if (originalFullText == null || originalFullText.isEmpty()) {
+            return allDetectedIssues;
         }
 
-        String lowerCaseText = text.toLowerCase(); // 英語リテラルフレーズのマッチング用
-        String normalizedInputTextForForbiddenCheck = KuromojiAnalyzer.convertToKatakana(text);
+        List<String> phrases = kuromojiAnalyzer.splitIntoPhrases(originalFullText);
+        // LOGGER.info("Original text for phrase splitting: \"{}\"", originalFullText); // Temporary logging
+        // LOGGER.info("Generated phrases: {}", phrases); // Temporary logging
 
-        // 1. 禁止されている日本語の単語をチェック (入力テキストと禁止単語リストの両方がカタカナ化されている)
-        for (String forbiddenWord : FORBIDDEN_WORDS_JP) { // forbiddenWord はロード時にカタカナ化済み
-            if (normalizedInputTextForForbiddenCheck.contains(forbiddenWord)) {
-                detectedIssues.add(new DetectionDetail(
-                    "prompt_injection_word_jp",
-                    forbiddenWord, // matched_pattern はカタカナ化された禁止単語
-                    forbiddenWord, // input_substring もカタカナ化された禁止単語 (簡易対応)
-                    1.0,
-                    "禁止された日本語の単語が検出されました（カタカナ正規化後）。"
-                ));
-            }
+        if (phrases.isEmpty() || phrases.stream().allMatch(String::isEmpty)) {
+            LOGGER.warn("Text could not be split into phrases or resulted in empty phrases. Analyzing full text as a single phrase: {}", originalFullText);
+            phrases = List.of(originalFullText);
         }
 
-        // 2. リテラルな英語フレーズをチェック（大文字・小文字を区別しない部分文字列の一致）
-        for (String literalEngPhrase : LITERAL_ENGLISH_PHRASES) {
-            // literalEngPhraseは既に小文字で格納されている
-            if (lowerCaseText.contains(literalEngPhrase)) {
-                // より正確な報告のために、元のテキストで実際の部分文字列を見つける
-                int startIndex = lowerCaseText.indexOf(literalEngPhrase);
-                String actualSubstring = text.substring(startIndex, startIndex + literalEngPhrase.length());
-                detectedIssues.add(new DetectionDetail(
-                    "prompt_injection_phrase_en",
-                    literalEngPhrase, // パターン（小文字）を格納
-                    actualSubstring,  // 元の大文字・小文字を含む部分文字列を格納
-                    1.0,
-                    "英語のフレーズ（大文字・小文字区別なし）に完全一致しました。"
-                ));
-            }
-        }
-
-        // 3. リテラルな日本語フレーズをチェック（NLPによる正規化と比較）
-        List<String> analyzedInputTextTokens = kuromojiAnalyzer.analyzeText(text); // 入力テキストを解析・正規化
-        String analyzedInputTextForMatching = String.join(" ", analyzedInputTextTokens); // 比較用にスペース区切り文字列に
-
-        for (String literalJpnPhrase : LITERAL_JAPANESE_PHRASES) {
-            List<String> analyzedRulePhraseTokens = kuromojiAnalyzer.analyzeText(literalJpnPhrase); // ルールフレーズを解析・正規化
-            if (analyzedRulePhraseTokens.isEmpty()) { // ルールフレーズが解析の結果空になる場合はスキップ
+        for (String currentPhrase : phrases) {
+            if (currentPhrase == null || currentPhrase.isEmpty()) {
                 continue;
             }
-            String analyzedRulePhraseForMatching = String.join(" ", analyzedRulePhraseTokens);
 
-            // 正規化された入力テキストに、正規化されたルールフレーズが含まれているかチェック
-            // より洗練された方法として、単語リストのサブシーケンス判定なども考えられる
-            if (analyzedInputTextForMatching.contains(analyzedRulePhraseForMatching)) {
-                detectedIssues.add(new DetectionDetail(
-                    "prompt_injection_phrase_ja_nlp", // タイプ名を変更してNLP処理経由であることを示す
-                    literalJpnPhrase,                 // 元のルールフレーズ
-                    analyzedRulePhraseForMatching,    // マッチした正規化後のルールフレーズ (または関連する部分)
-                    1.0,                              // スコア (必要に応じて調整)
-                    "日本語のフレーズにNLP処理後の正規化文字列で一致しました。"
-                ));
+            String lowerCasePhrase = currentPhrase.toLowerCase();
+            String normalizedPhraseForForbiddenCheck = KuromojiAnalyzer.convertToKatakana(currentPhrase);
+            List<String> analyzedPhraseTokens = kuromojiAnalyzer.analyzeText(currentPhrase);
+            String analyzedPhraseForMatching = String.join(" ", analyzedPhraseTokens);
+
+            // 1. 禁止されている日本語の単語をチェック
+            for (String forbiddenWord : FORBIDDEN_WORDS_JP) {
+                if (normalizedPhraseForForbiddenCheck.contains(forbiddenWord)) {
+                    DetectionDetail newDetail = new DetectionDetail(
+                        "prompt_injection_word_jp",
+                        forbiddenWord,
+                        currentPhrase,
+                        1.0,
+                        "禁止された日本語の単語が検出されました（カタカナ正規化後）。",
+                        originalFullText
+                    );
+                    // LOGGER.info("Adding DetectionDetail: type={}, pattern={}, phrase=\"{}\"", newDetail.getType(), newDetail.getMatched_pattern(), newDetail.getInput_substring());
+                    allDetectedIssues.add(newDetail);
+                }
             }
-        }
 
-        // 4. 正規表現パターンをチェック
-        for (Pattern regexPattern : REGEX_PATTERNS) {
-            Matcher matcher = regexPattern.matcher(text);
-            while (matcher.find()) { // 正規表現がアンカーされていない場合、すべての一致を見つけるためにwhileを使用
-                detectedIssues.add(new DetectionDetail(
-                    "prompt_injection_regex",
-                    regexPattern.pattern(),
-                    matcher.group(),
-                    1.0, // 正規表現のマッチはこの目的では完全一致と見なされる
-                    "正規表現パターンに一致しました。"
-                ));
+            // 2. リテラルな英語フレーズをチェック
+            for (String literalEngPhrase : LITERAL_ENGLISH_PHRASES) {
+                if (lowerCasePhrase.contains(literalEngPhrase)) {
+                    int startIndex = lowerCasePhrase.indexOf(literalEngPhrase);
+                    String actualSubstringInPhrase = currentPhrase.substring(startIndex, startIndex + literalEngPhrase.length());
+                    DetectionDetail newDetail = new DetectionDetail(
+                        "prompt_injection_phrase_en",
+                        literalEngPhrase,
+                        actualSubstringInPhrase,
+                        1.0,
+                        "英語のフレーズ（大文字・小文字区別なし）に完全一致しました。",
+                        originalFullText
+                    );
+                    // LOGGER.info("Adding DetectionDetail: type={}, pattern={}, phrase=\"{}\", matched_substring=\"{}\"", newDetail.getType(), newDetail.getMatched_pattern(), currentPhrase, actualSubstringInPhrase);
+                    allDetectedIssues.add(newDetail);
+                }
             }
-        }
 
-        // 5. オリジナルフレーズに対するJaro-Winkler類似度チェック (NLPで正規化後)
-        JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
-        // analyzedInputTextForMatching は既にこのメソッドの冒頭で日本語リテラルチェックのために生成されているものを再利用
+            // 3. リテラルな日本語フレーズをチェック（NLPによる正規化と比較）
+            if (!analyzedPhraseForMatching.isEmpty()) {
+                for (String literalJpnPhrase : LITERAL_JAPANESE_PHRASES) {
+                    List<String> analyzedRulePhraseTokens = kuromojiAnalyzer.analyzeText(literalJpnPhrase);
+                    if (analyzedRulePhraseTokens.isEmpty()) {
+                        continue;
+                    }
+                    String analyzedRulePhraseForMatching = String.join(" ", analyzedRulePhraseTokens);
 
-        for (String originalPhrase : ORIGINAL_PHRASES_FOR_SIMILARITY) {
-            List<String> analyzedRulePhraseTokens = kuromojiAnalyzer.analyzeText(originalPhrase);
-            if (analyzedRulePhraseTokens.isEmpty()) {
-                continue; // 正規化の結果、ルールフレーズが空になった場合はスキップ
-            }
-            String analyzedRulePhraseForSimilarity = String.join(" ", analyzedRulePhraseTokens);
-
-            // 正規化された文字列同士で類似度を計算
-            double score = jaroWinkler.apply(analyzedInputTextForMatching, analyzedRulePhraseForSimilarity);
-
-            // 設定ファイルから取得した類似度閾値を使用
-            if (score >= scoreThresholdsConfig.getSimilarityThreshold()) {
-                boolean alreadyFoundExactOrNlpLiteral = false;
-                for (DetectionDetail detail : detectedIssues) {
-                    // 完全一致またはNLPによるリテラル一致で既に見つかっているかチェック
-                    // detail.getMatched_pattern() は元のルールフレーズ
-                    // detail.getInput_substring() はNLPリテラルマッチの場合、正規化後のルールフレーズが入っている
-                    if ( (detail.getMatched_pattern().equalsIgnoreCase(originalPhrase) && detail.getSimilarity_score() != null && detail.getSimilarity_score() == 1.0) ||
-                         (detail.getType().equals("prompt_injection_phrase_ja_nlp") && detail.getMatched_pattern().equalsIgnoreCase(originalPhrase)) ) {
-                        alreadyFoundExactOrNlpLiteral = true;
-                        break;
+                    if (analyzedPhraseForMatching.contains(analyzedRulePhraseForMatching)) {
+                        DetectionDetail newDetail = new DetectionDetail(
+                            "prompt_injection_phrase_ja_nlp",
+                            literalJpnPhrase,
+                            currentPhrase,
+                            1.0,
+                            "日本語のフレーズにNLP処理後の正規化文字列で一致しました。",
+                            originalFullText
+                        );
+                        // LOGGER.info("Adding DetectionDetail: type={}, pattern=\"{}\", phrase=\"{}\"", newDetail.getType(), newDetail.getMatched_pattern(), newDetail.getInput_substring());
+                        allDetectedIssues.add(newDetail);
                     }
                 }
+            }
 
-                if (!alreadyFoundExactOrNlpLiteral) {
-                    detectedIssues.add(new DetectionDetail(
-                        "prompt_injection_similarity_nlp", // タイプ名を変更
-                        originalPhrase,                     // 元のルールフレーズ
-                        analyzedRulePhraseForSimilarity,    // 比較に使用した正規化後のルールフレーズ
-                        score,
-                        "既知のインジェクションフレーズとの類似度が高いです（NLP正規化後）。"
-                    ));
+            // 4. 正規表現パターンをチェック
+            for (Pattern regexPattern : REGEX_PATTERNS) {
+                Matcher matcher = regexPattern.matcher(currentPhrase);
+                while (matcher.find()) {
+                    DetectionDetail newDetail = new DetectionDetail(
+                        "prompt_injection_regex",
+                        regexPattern.pattern(),
+                        matcher.group(),
+                        1.0,
+                        "正規表現パターンに一致しました。",
+                        originalFullText
+                    );
+                    // LOGGER.info("Adding DetectionDetail: type={}, pattern=\"{}\", matched_in_phrase=\"{}\", phrase=\"{}\"", newDetail.getType(), newDetail.getMatched_pattern(), newDetail.getInput_substring(), currentPhrase);
+                    allDetectedIssues.add(newDetail);
                 }
             }
-        }
 
-        // 6. 非日本語の文章をチェック
-        if (isNonJapaneseSentence(text)) {
-            detectedIssues.add(new DetectionDetail(
-                "non_japanese_sentence",
-                text, // 現時点ではマッチしたパターンとして全文を使用
-                text, // 現時点では入力部分文字列として全文を使用
-                1.0,  // 明確な検出
-                "入力に非日本語の文章が含まれています。"
-            ));
+            // 5. オリジナルフレーズに対するJaro-Winkler類似度チェック (NLPで正規化後)
+            if (!analyzedPhraseForMatching.isEmpty()) {
+                JaroWinklerSimilarity jaroWinkler = new JaroWinklerSimilarity();
+                for (String originalRulePhraseForSimilarity : ORIGINAL_PHRASES_FOR_SIMILARITY) {
+                    List<String> analyzedRulePhraseTokens = kuromojiAnalyzer.analyzeText(originalRulePhraseForSimilarity);
+                    if (analyzedRulePhraseTokens.isEmpty()) {
+                        continue;
+                    }
+                    String analyzedRulePhraseForSimilarity = String.join(" ", analyzedRulePhraseTokens);
+
+                    double score = jaroWinkler.apply(analyzedPhraseForMatching, analyzedRulePhraseForSimilarity);
+
+                    if (score >= scoreThresholdsConfig.getSimilarityThreshold()) {
+                        boolean alreadyFoundExactOrNlpLiteral = false;
+                        for (DetectionDetail detail : allDetectedIssues) {
+                            if (detail.getInput_substring().equals(currentPhrase) && detail.getMatched_pattern().equalsIgnoreCase(originalRulePhraseForSimilarity)) {
+                                if (detail.getType().equals("prompt_injection_phrase_en") ||
+                                    detail.getType().equals("prompt_injection_phrase_ja_nlp") ||
+                                    detail.getType().equals("prompt_injection_word_jp") ||
+                                    detail.getType().equals("prompt_injection_regex")) {
+                                    if (detail.getSimilarity_score() == null || detail.getSimilarity_score() == 1.0) {
+                                        alreadyFoundExactOrNlpLiteral = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!alreadyFoundExactOrNlpLiteral) {
+                            DetectionDetail newDetail = new DetectionDetail(
+                                "prompt_injection_similarity_nlp",
+                                originalRulePhraseForSimilarity,
+                                currentPhrase,
+                                score,
+                                "既知のインジェクションフレーズとの類似度が高いです（NLP正規化後）。",
+                                originalFullText
+                            );
+                            // LOGGER.info("Adding DetectionDetail (Similarity): type={}, pattern=\"{}\", phrase=\"{}\", score={}", newDetail.getType(), newDetail.getMatched_pattern(), newDetail.getInput_substring(), score);
+                            allDetectedIssues.add(newDetail);
+                        }
+                    }
+                }
+            }
+
+            // 6. 非日本語の文章をチェック (now applied per phrase)
+            if (isNonJapaneseSentence(currentPhrase)) {
+                DetectionDetail newDetail = new DetectionDetail(
+                    "non_japanese_phrase",
+                    currentPhrase,
+                    currentPhrase,
+                    1.0,
+                    "入力フレーズに非日本語の文章が含まれています。",
+                    originalFullText
+                );
+                // LOGGER.info("Adding DetectionDetail: type={}, phrase=\"{}\"", newDetail.getType(), newDetail.getInput_substring());
+                allDetectedIssues.add(newDetail);
+            }
         }
-        // TODO: 複数のパターン（例：完全一致と類似度）が同じ入力部分にマッチする場合の重複排除ロジックを検討する。
-        return detectedIssues;
+        // TODO: Consider more sophisticated duplicate/overlapping DetectionDetail filtering if needed.
+        return allDetectedIssues;
     }
 
     // containsForbiddenWordsJp メソッドは isPromptInjectionAttempt に統合された

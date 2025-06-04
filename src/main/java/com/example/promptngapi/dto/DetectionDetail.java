@@ -10,6 +10,7 @@ public class DetectionDetail {
     private String input_substring;
     private Double similarity_score; // Use Double to allow null
     private String details;
+    private String original_text_full; // New field
 
     /**
      * Default constructor for Jackson deserialization.
@@ -18,17 +19,23 @@ public class DetectionDetail {
     }
 
     // Constructor
-    public DetectionDetail(String type, String matched_pattern, String input_substring, Double similarity_score, String details) {
+    public DetectionDetail(String type, String matched_pattern, String input_substring, Double similarity_score, String details, String original_text_full) {
         this.type = type;
         this.matched_pattern = matched_pattern;
         this.input_substring = input_substring;
         this.similarity_score = similarity_score;
         this.details = details;
+        this.original_text_full = original_text_full;
     }
 
-    // Constructor without similarity_score and details for simpler cases
+    // Constructor without similarity_score, details, and original_text_full for simpler cases (or adapt as needed)
     public DetectionDetail(String type, String matched_pattern, String input_substring) {
-        this(type, matched_pattern, input_substring, null, null);
+        this(type, matched_pattern, input_substring, null, null, null);
+    }
+
+    // Constructor for cases where original_text_full is needed but maybe not similarity/details
+    public DetectionDetail(String type, String matched_pattern, String input_substring, String original_text_full) {
+        this(type, matched_pattern, input_substring, null, null, original_text_full);
     }
 
 
@@ -71,5 +78,13 @@ public class DetectionDetail {
 
     public void setDetails(String details) {
         this.details = details;
+    }
+
+    public String getOriginal_text_full() {
+        return original_text_full;
+    }
+
+    public void setOriginal_text_full(String original_text_full) {
+        this.original_text_full = original_text_full;
     }
 }
