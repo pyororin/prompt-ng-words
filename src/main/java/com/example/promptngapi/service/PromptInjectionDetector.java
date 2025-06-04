@@ -79,8 +79,12 @@ public class PromptInjectionDetector {
 
             // forbidden_words_jp のロード
             List<String> loadedForbiddenWords = (List<String>) data.getOrDefault("forbidden_words_jp", new ArrayList<>());
-            FORBIDDEN_WORDS_JP.addAll(loadedForbiddenWords);
-            LOGGER.info("{}個の日本語禁止単語をロードしました。", FORBIDDEN_WORDS_JP.size());
+            List<String> katakanaForbiddenWords = new ArrayList<>();
+            for (String word : loadedForbiddenWords) {
+                katakanaForbiddenWords.add(KuromojiAnalyzer.convertToKatakana(word));
+            }
+            FORBIDDEN_WORDS_JP.addAll(katakanaForbiddenWords);
+            LOGGER.info("{}個の日本語禁止単語をロードし、カタカナに正規化して格納しました。", FORBIDDEN_WORDS_JP.size());
 
             // injection_patterns のロード
             List<Map<String, String>> loadedPatternMaps = (List<Map<String, String>>) data.get("injection_patterns");
@@ -146,16 +150,17 @@ public class PromptInjectionDetector {
         }
 
         String lowerCaseText = text.toLowerCase(); // 英語リテラルフレーズのマッチング用
+        String normalizedInputTextForForbiddenCheck = KuromojiAnalyzer.convertToKatakana(text);
 
-        // 1. 禁止されている日本語の単語をチェック
-        for (String forbiddenWord : FORBIDDEN_WORDS_JP) {
-            if (text.contains(forbiddenWord)) { // 日本語は元のテキストでチェック
+        // 1. 禁止されている日本語の単語をチェック (入力テキストと禁止単語リストの両方がカタカナ化されている)
+        for (String forbiddenWord : FORBIDDEN_WORDS_JP) { // forbiddenWord はロード時にカタカナ化済み
+            if (normalizedInputTextForForbiddenCheck.contains(forbiddenWord)) {
                 detectedIssues.add(new DetectionDetail(
                     "prompt_injection_word_jp",
-                    forbiddenWord,
-                    forbiddenWord, // 単語リストの場合、マッチしたパターンと部分文字列は単語自体
+                    forbiddenWord, // matched_pattern はカタカナ化された禁止単語
+                    forbiddenWord, // input_substring もカタカナ化された禁止単語 (簡易対応)
                     1.0,
-                    "禁止された日本語の単語が検出されました。"
+                    "禁止された日本語の単語が検出されました（カタカナ正規化後）。"
                 ));
             }
         }
