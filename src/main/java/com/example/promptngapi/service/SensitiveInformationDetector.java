@@ -69,7 +69,8 @@ public class SensitiveInformationDetector {
 
 
     // Regex for Japanese My Number (12 digits) - for finding in cleaned text.
-    private static final Pattern FIND_IN_CLEANED_MY_NUMBER_PATTERN = Pattern.compile("[0-9]{12}");
+    // Uses lookaround to ensure the 12 digits are not part of a longer number sequence (e.g., a credit card).
+    private static final Pattern FIND_IN_CLEANED_MY_NUMBER_PATTERN = Pattern.compile("(?<![0-9])[0-9]{12}(?![0-9])");
     // The old one for exact matches, kept for reference or if direct validation is ever needed.
     private static final Pattern CLEANED_MY_NUMBER_PATTERN_ANCHORED = Pattern.compile("^[0-9]{12}$");
 
@@ -160,7 +161,7 @@ public class SensitiveInformationDetector {
                 "sensitive_info_credit_card",
                 "Credit Card Pattern", // Or FIND_IN_CLEANED_CREDIT_CARD_PATTERN.pattern()
                 cardMatcher.group(),
-                0.7,
+                1.0, // Exact match for a defined pattern
                 "Credit card number detected."
             ));
         }
@@ -173,7 +174,7 @@ public class SensitiveInformationDetector {
                 "sensitive_info_my_number",
                 "My Number Pattern", // Or FIND_IN_CLEANED_MY_NUMBER_PATTERN.pattern()
                 myNumberMatcher.group(),
-                0.7,
+                1.0, // Exact match for a defined pattern
                 "My Number detected."
             ));
         }

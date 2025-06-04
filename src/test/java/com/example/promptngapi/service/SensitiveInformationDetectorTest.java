@@ -82,12 +82,19 @@ public class SensitiveInformationDetectorTest {
 
     @Test
     void hasSensitiveInformation_myNumberTooLong_shouldNotBeStrictlyMyNumber() {
-        // Service cleans and then uses find() with "[0-9]{12}".
-        // So, "1234567890123" will have "123456789012" detected.
+        // With the new regex (?<![0-9])[0-9]{12}(?![0-9]), "1234567890123" should NOT match.
         List<DetectionDetail> details = detector.hasSensitiveInformation("1234567890123 is too long");
-         assertThat(details).isNotNull().hasSize(1);
-        assertThat(details.get(0).getInput_substring()).isEqualTo("123456789012");
-        assertThat(details.get(0).getType()).isEqualTo("sensitive_info_my_number");
+        assertThat(details).allSatisfy(d -> assertThat(d.getType()).isNotEqualTo("sensitive_info_my_number"));
+        // Check that if it was detected by some other means, it's not MyNumber type.
+        // More simply, ensure no details are returned if this is the only potential info.
+        // For this specific input, we expect no detection of MyNumber.
+        // If other detections were possible from this string, this test would need adjustment.
+        // Assuming "1234567890123 is too long" only potentially contains a MyNumber.
+        boolean myNumberDetected = details.stream().anyMatch(d -> d.getType().equals("sensitive_info_my_number"));
+        assertThat(myNumberDetected).isFalse();
+        // Based on the failure (Expected size:1 but was:0), it means NO details are returned.
+        // So the list should be empty for this specific input if only MyNumber was being tested.
+        assertThat(details).isEmpty();
     }
 
     @Test
