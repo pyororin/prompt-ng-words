@@ -2,172 +2,97 @@ package com.example.promptngapi.service;
 
 import com.example.promptngapi.dto.DetectionDetail;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import com.example.promptngapi.dto.DetectionDetail;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SensitiveInformationDetectorTest {
 
     private SensitiveInformationDetector detector;
 
+    static record ExpectedSensitiveDetection(String type, String matchedPattern, String inputSubstring, Double score) {
+        ExpectedSensitiveDetection(String type, String matchedPattern, String inputSubstring) {
+            this(type, matchedPattern, inputSubstring, 1.0); // Default score
+        }
+
+        static ExpectedSensitiveDetection fromDetectionDetail(DetectionDetail detail) {
+            // Ensure score is non-null for comparison, defaulting if necessary, or handle nulls if they are significant
+            Double score = detail.getSimilarity_score(); // Assuming score is on similarity_score field
+            return new ExpectedSensitiveDetection(detail.getType(), detail.getMatched_pattern(), detail.getInput_substring(), score != null ? score : 1.0);
+        }
+    }
+
     @BeforeEach
     void setUp() {
         detector = new SensitiveInformationDetector();
     }
 
-    // --- Credit Card Detection Tests ---
-    @Test
-    void hasSensitiveInformation_withValidVisa16_shouldReturnCreditCardDetail() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("My card is 4556739871695869 today");
-        assertThat(details).isNotNull().hasSize(1);
-        DetectionDetail detail = details.get(0);
-        assertThat(detail.getType()).isEqualTo("sensitive_info_credit_card");
-        assertThat(detail.getMatched_pattern()).isEqualTo("Credit Card Pattern");
-        assertThat(detail.getInput_substring()).isEqualTo("4556739871695869");
-        assertThat(detail.getSimilarity_score()).isEqualTo(1.0);
-    }
+    static Stream<Arguments> sensitiveInfoTestCases() {
+        return Stream.of(
+            Arguments.of("Valid Visa16", "My card is 4556739871695869 today",
+                List.of(new ExpectedSensitiveDetection("sensitive_info_credit_card", "Credit Card Pattern", "4556739871695869", 1.0))),
+            Arguments.of("Visa with Hyphens", "Card: 4556-7398-7169-5869.",
+                List.of(new ExpectedSensitiveDetection("sensitive_info_credit_card", "Credit Card Pattern", "4556739871695869", 1.0))),
+            Arguments.of("Multiple Credit Cards", "Visa: 4556739871695869 and Mastercard: 5100112233445566",
+                List.of(
+                    new ExpectedSensitiveDetection("sensitive_info_credit_card", "Credit Card Pattern", "4556739871695869", 1.0),
+                    new ExpectedSensitiveDetection("sensitive_info_credit_card", "Credit Card Pattern", "5100112233445566", 1.0)
+                )),
+            Arguments.of("Invalid Credit Card Length", "My card is 123456789012345 (invalid length)", Collections.emptyList()),
+            Arguments.of("Text Without Credit Card", "This is a string with no card numbers.", Collections.emptyList()),
 
-    @Test
-    void hasSensitiveInformation_withVisaWithHyphens_shouldReturnCreditCardDetail() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("Card: 4556-7398-7169-5869.");
-        assertThat(details).isNotNull().hasSize(1);
-        DetectionDetail detail = details.get(0);
-        assertThat(detail.getType()).isEqualTo("sensitive_info_credit_card");
-        assertThat(detail.getInput_substring()).isEqualTo("4556739871695869"); // Cleaned version
-    }
+            Arguments.of("Valid MyNumber", "My number is 123456789012, please confirm.",
+                List.of(new ExpectedSensitiveDetection("sensitive_info_my_number", "My Number Pattern", "123456789012", 1.0))),
+            Arguments.of("MyNumber with Spaces", "My number is 1234 5678 9012 formatted.",
+                List.of(new ExpectedSensitiveDetection("sensitive_info_my_number", "My Number Pattern", "123456789012", 1.0))),
+            Arguments.of("MyNumber Too Long", "1234567890123 is too long", Collections.emptyList()),
+            Arguments.of("MyNumber Too Short", "12345678901 is too short", Collections.emptyList()),
 
-    @Test
-    void hasSensitiveInformation_withMultipleCreditCards_shouldReturnMultipleDetails() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("Visa: 4556739871695869 and Mastercard: 5100112233445566");
-        assertThat(details).isNotNull().hasSize(2);
-        assertThat(details).extracting(DetectionDetail::getInput_substring).containsExactlyInAnyOrder("4556739871695869", "5100112233445566");
-        assertThat(details).allMatch(d -> d.getType().equals("sensitive_info_credit_card"));
-    }
+            Arguments.of("Japanese Address Placeholder", "Address: Test Ken Test Shi 1-2-3",
+                List.of(new ExpectedSensitiveDetection("sensitive_info_address", "Japanese Address Placeholder Pattern", "該当箇所 (簡易検出のため特定困難)", 0.7))),
+            Arguments.of("No Japanese Address", "This is a normal sentence without address cues", Collections.emptyList()),
 
-    @Test
-    void hasSensitiveInformation_invalidCreditCard_shouldNotDetectAsCard() {
-        // This tests that a number that doesn't match STRICT_CREDIT_CARD_PATTERN (after cleaning)
-        // but might be found by FIND_IN_CLEANED_CREDIT_CARD_PATTERN if it were less strict, is handled.
-        // Current logic uses STRICT_CREDIT_CARD_PATTERN and matches(), so "123456789012345" should not match.
-        List<DetectionDetail> details = detector.hasSensitiveInformation("My card is 123456789012345 (invalid length)");
-         assertThat(details).allSatisfy(d -> assertThat(d.getType()).isNotEqualTo("sensitive_info_credit_card"));
-    }
+            Arguments.of("Japanese Name Placeholder", "My friend Test Name Sama is here.",
+                List.of(new ExpectedSensitiveDetection("sensitive_info_name", "Japanese Name Placeholder Pattern", "該当箇所 (簡易検出のため特定困難)", 0.7))),
+            Arguments.of("No Japanese Name", "This text has no names like that.", Collections.emptyList()),
 
-    @Test
-    void hasSensitiveInformation_textWithoutCreditCard_shouldNotReturnCardDetail() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("This is a string with no card numbers.");
-        assertThat(details).allSatisfy(d -> assertThat(d.getType()).isNotEqualTo("sensitive_info_credit_card"));
-    }
-
-    // --- My Number Detection Tests ---
-    @Test
-    void hasSensitiveInformation_withMyNumber_shouldReturnMyNumberDetail() {
-        // Test with MyNumber embedded in text
-        List<DetectionDetail> details = detector.hasSensitiveInformation("My number is 123456789012, please confirm.");
-        assertThat(details).isNotNull().hasSize(1);
-        DetectionDetail detail = details.get(0);
-        assertThat(detail.getType()).isEqualTo("sensitive_info_my_number");
-        assertThat(detail.getMatched_pattern()).isEqualTo("My Number Pattern"); // From service
-        assertThat(detail.getInput_substring()).isEqualTo("123456789012");
-        assertThat(detail.getSimilarity_score()).isEqualTo(1.0);
-    }
-
-    @Test
-    void hasSensitiveInformation_withMyNumberWithSpaces_shouldReturnMyNumberDetail() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("My number is 1234 5678 9012 formatted.");
-        assertThat(details).isNotNull().hasSize(1);
-        assertThat(details.get(0).getType()).isEqualTo("sensitive_info_my_number");
-        assertThat(details.get(0).getInput_substring()).isEqualTo("123456789012");
-    }
-
-    @Test
-    void hasSensitiveInformation_myNumberTooLong_shouldNotBeStrictlyMyNumber() {
-        // With the new regex (?<![0-9])[0-9]{12}(?![0-9]), "1234567890123" should NOT match.
-        List<DetectionDetail> details = detector.hasSensitiveInformation("1234567890123 is too long");
-        assertThat(details).allSatisfy(d -> assertThat(d.getType()).isNotEqualTo("sensitive_info_my_number"));
-        // Check that if it was detected by some other means, it's not MyNumber type.
-        // More simply, ensure no details are returned if this is the only potential info.
-        // For this specific input, we expect no detection of MyNumber.
-        // If other detections were possible from this string, this test would need adjustment.
-        // Assuming "1234567890123 is too long" only potentially contains a MyNumber.
-        boolean myNumberDetected = details.stream().anyMatch(d -> d.getType().equals("sensitive_info_my_number"));
-        assertThat(myNumberDetected).isFalse();
-        // Based on the failure (Expected size:1 but was:0), it means NO details are returned.
-        // So the list should be empty for this specific input if only MyNumber was being tested.
-        assertThat(details).isEmpty();
-    }
-
-    @Test
-    void hasSensitiveInformation_myNumberTooShort_shouldNotDetect() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("12345678901 is too short");
-        assertThat(details).allSatisfy(d -> assertThat(d.getType()).isNotEqualTo("sensitive_info_my_number"));
-    }
-
-
-    // --- Address Detection Tests (Placeholder) ---
-    @Test
-    void hasSensitiveInformation_withJapaneseAddressPlaceholder_shouldReturnAddressDetail() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("Address: Test Ken Test Shi 1-2-3");
-        assertThat(details).isNotNull();
-        assertThat(details).anySatisfy(detail -> {
-            assertThat(detail.getType()).isEqualTo("sensitive_info_address");
-            assertThat(detail.getMatched_pattern()).isEqualTo("Japanese Address Placeholder Pattern");
-            assertThat(detail.getInput_substring()).isEqualTo("該当箇所 (簡易検出のため特定困難)");
-        });
-    }
-
-    @Test
-    void hasSensitiveInformation_noJapaneseAddress_shouldNotReturnAddressDetail() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("This is a normal sentence without address cues");
-        assertThat(details).allSatisfy(d -> assertThat(d.getType()).isNotEqualTo("sensitive_info_address"));
-    }
-
-    // --- Name Detection Tests (Placeholder) ---
-    @Test
-    void hasSensitiveInformation_withJapaneseNamePlaceholder_shouldReturnNameDetail() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("My friend Test Name Sama is here.");
-        assertThat(details).isNotNull();
-         assertThat(details).anySatisfy(detail -> {
-            assertThat(detail.getType()).isEqualTo("sensitive_info_name");
-            assertThat(detail.getMatched_pattern()).isEqualTo("Japanese Name Placeholder Pattern");
-        });
-    }
-
-    @Test
-    void hasSensitiveInformation_noJapaneseName_shouldNotReturnNameDetail() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("This text has no names like that.");
-         assertThat(details).allSatisfy(d -> assertThat(d.getType()).isNotEqualTo("sensitive_info_name"));
-    }
-
-    // --- Combined Tests ---
-    @Test
-    void hasSensitiveInformation_multipleMixedDetections_shouldReturnAllDetails() {
-        String text = "My card is 4556739871695869, MyNumber is 123456789012, and I live at Test Ken Test Shi 1-2-3, said Test Name Sama.";
-        List<DetectionDetail> details = detector.hasSensitiveInformation(text);
-        assertThat(details).isNotNull().hasSize(4); // Card, MyNumber, Address, Name
-        assertThat(details).extracting(DetectionDetail::getType).containsExactlyInAnyOrder(
-            "sensitive_info_credit_card",
-            "sensitive_info_my_number",
-            "sensitive_info_address",
-            "sensitive_info_name"
+            Arguments.of("Multiple Mixed Detections", "My card is 4556739871695869, MyNumber is 123456789012, and I live at Test Ken Test Shi 1-2-3, said Test Name Sama.",
+                List.of(
+                    new ExpectedSensitiveDetection("sensitive_info_credit_card", "Credit Card Pattern", "4556739871695869", 1.0),
+                    new ExpectedSensitiveDetection("sensitive_info_my_number", "My Number Pattern", "123456789012", 1.0),
+                    new ExpectedSensitiveDetection("sensitive_info_address", "Japanese Address Placeholder Pattern", "該当箇所 (簡易検出のため特定困難)", 0.7), // Corrected score
+                    new ExpectedSensitiveDetection("sensitive_info_name", "Japanese Name Placeholder Pattern", "該当箇所 (簡易検出のため特定困難)", 0.7)  // Corrected substring and score
+                )),
+            Arguments.of("No Sensitive Info", "This is a perfectly normal and safe sentence.", Collections.emptyList()),
+            Arguments.of("Empty String", "", Collections.emptyList()),
+            Arguments.of("Null Input", null, Collections.emptyList())
         );
     }
 
-    @Test
-    void hasSensitiveInformation_noSensitiveInfo_shouldReturnEmptyList() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("This is a perfectly normal and safe sentence.");
-        assertThat(details).isNotNull().isEmpty();
-    }
+    @ParameterizedTest(name = "{index} => {0}")
+    @MethodSource("sensitiveInfoTestCases")
+    void testSensitiveInformationDetectionScenarios(String testCaseName, String inputText, List<ExpectedSensitiveDetection> expectedDetectionsList) {
+        List<DetectionDetail> actualDetails = detector.hasSensitiveInformation(inputText);
+        assertThat(actualDetails).isNotNull();
 
-    @Test
-    void hasSensitiveInformation_emptyString_shouldReturnEmptyList() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation("");
-        assertThat(details).isNotNull().isEmpty();
-    }
+        if (expectedDetectionsList.isEmpty()) {
+            assertThat(actualDetails).isEmpty();
+        } else {
+            // Transform actual DetectionDetail objects to ExpectedSensitiveDetection for comparison
+            List<ExpectedSensitiveDetection> actualTransformed = actualDetails.stream()
+                .map(ExpectedSensitiveDetection::fromDetectionDetail)
+                .collect(Collectors.toList());
 
-    @Test
-    void hasSensitiveInformation_nullInput_shouldReturnEmptyList() {
-        List<DetectionDetail> details = detector.hasSensitiveInformation(null);
-        assertThat(details).isNotNull().isEmpty();
+            assertThat(actualTransformed).containsExactlyInAnyOrderElementsOf(expectedDetectionsList);
+        }
     }
 }
