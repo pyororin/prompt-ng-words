@@ -1,14 +1,27 @@
 package com.example.promptngapi.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.ArrayList;
 import java.util.List;
 
+@Schema(description = "プロンプト判定APIのレスポンス")
 public class PromptNGResponse {
 
+    @Schema(description = "総合的な判定結果。問題がなければtrue、何らかの問題が検出されればfalse。", example = "true")
     private boolean overall_result;
+
+    @Schema(description = "検出された問題の詳細リスト。問題がない場合は空のリスト。")
     private List<DetectionDetail> detections;
+
+    @Schema(description = "このリクエストで使用された類似度閾値。", example = "0.85", nullable = true)
     private Double similarityThreshold;
+
+    @Schema(description = "このリクエストで使用された非日本語文の単語数閾値。", example = "3", nullable = true)
     private Integer nonJapaneseSentenceWordThreshold;
+
+    // Default constructor for Jackson
+    public PromptNGResponse() {
+    }
 
     // Constructors
     public PromptNGResponse(boolean overall_result) {

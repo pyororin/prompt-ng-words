@@ -4,6 +4,7 @@ import com.example.promptngapi.config.PromptInjectionRuleConfig; // 必要に応
 import com.example.promptngapi.dto.DetectionDetail;
 import com.example.promptngapi.nlp.KuromojiAnalyzer;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test; // Added import
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mockito; // Mockito使うなら
 import static org.mockito.Mockito.when; // Added for when
