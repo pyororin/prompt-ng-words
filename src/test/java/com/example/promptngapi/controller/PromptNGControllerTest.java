@@ -5,7 +5,9 @@ import com.example.promptngapi.dto.PromptNGResponse;
 import com.example.promptngapi.dto.PromptRequest;
 import com.example.promptngapi.service.PromptInjectionDetector;
 import com.example.promptngapi.service.SensitiveInformationDetector;
+import com.example.promptngapi.config.ScoreThresholdsConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -31,6 +33,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 @AutoConfigureMockMvc
 public class PromptNGControllerTest {
+
+    private static final Double DEFAULT_SIMILARITY_THRESHOLD = 0.7;
+    private static final Integer DEFAULT_NON_JAPANESE_WORD_THRESHOLD = 3;
 
     @Autowired
     private MockMvc mockMvc;
@@ -150,5 +155,81 @@ public class PromptNGControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(asJsonString(requestWithNullText)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @AfterEach
+    void tearDown() {
+        // Clear ThreadLocal values after each test to ensure test isolation
+        ScoreThresholdsConfig.clearRequestThresholds();
+    }
+
+    private static Stream<Arguments> provideTestParametersForJudgePromptWithThresholds() {
+        return Stream.of(
+            Arguments.of(
+                "Defaults: No override thresholds in request",
+                "Test with defaults",
+                null, null, // request thresholds
+                DEFAULT_SIMILARITY_THRESHOLD, DEFAULT_NON_JAPANESE_WORD_THRESHOLD // expected in response
+            ),
+            Arguments.of(
+                "Custom Similarity: Override similarity threshold in request",
+                "Custom similarity",
+                0.9, null, // request thresholds
+                0.9, DEFAULT_NON_JAPANESE_WORD_THRESHOLD // expected in response
+            ),
+            Arguments.of(
+                "Custom Non-Japanese Word Threshold: Override non-Japanese word threshold in request",
+                "Custom non-jap word count",
+                null, 5, // request thresholds
+                DEFAULT_SIMILARITY_THRESHOLD, 5 // expected in response
+            ),
+            Arguments.of(
+                "Both Custom: Override both thresholds in request",
+                "Both custom",
+                0.65, 2, // request thresholds
+                0.65, 2 // expected in response
+            )
+        );
+    }
+
+    @ParameterizedTest(name = "{index} => {0}")
+    @MethodSource("provideTestParametersForJudgePromptWithThresholds")
+    void judgePrompt_withThresholdOverrides_parameterized(String testCaseName, String promptText,
+                                                          Double requestSimilarityThreshold,
+                                                          Integer requestNonJapaneseSentenceWordThreshold,
+                                                          Double expectedSimilarityThresholdInResponse,
+                                                          Integer expectedNonJapaneseThresholdInResponse) throws Exception {
+
+        // Mock detectors to return no issues, as we are focusing on threshold propagation
+        when(sensitiveInformationDetectorMock.hasSensitiveInformation(anyString())).thenReturn(Collections.emptyList());
+        when(promptInjectionDetectorMock.isPromptInjectionAttempt(anyString())).thenReturn(Collections.emptyList());
+
+        PromptRequest promptRequest = new PromptRequest(promptText);
+        if (requestSimilarityThreshold != null) {
+            promptRequest.setSimilarityThreshold(requestSimilarityThreshold);
+        }
+        if (requestNonJapaneseSentenceWordThreshold != null) {
+            promptRequest.setNonJapaneseSentenceWordThreshold(requestNonJapaneseSentenceWordThreshold);
+        }
+
+        MvcResult mvcResult = mockMvc.perform(post("/prompt-ng/v1/judge")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(asJsonString(promptRequest)))
+                .andExpect(status().isOk()) // Expect OK for these test cases
+                .andReturn();
+
+        String jsonResponse = mvcResult.getResponse().getContentAsString();
+        PromptNGResponse response = objectMapper.readValue(jsonResponse, PromptNGResponse.class);
+
+        assertThat(response.getSimilarityThreshold())
+            .as("Checking similarity threshold in response for test case: " + testCaseName)
+            .isEqualTo(expectedSimilarityThresholdInResponse);
+        assertThat(response.getNonJapaneseSentenceWordThreshold())
+            .as("Checking non-Japanese sentence word threshold in response for test case: " + testCaseName)
+            .isEqualTo(expectedNonJapaneseThresholdInResponse);
+
+        // Also, ensure overall_result is true as detectors return no issues
+        assertThat(response.isOverall_result()).isTrue();
+        assertThat(response.getDetections()).isEmpty();
     }
 }
