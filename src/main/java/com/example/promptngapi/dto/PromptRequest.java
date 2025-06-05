@@ -14,6 +14,9 @@ public class PromptRequest {
     @NotBlank(message = "Text cannot be blank")
     private String text;
 
+    private Double similarityThreshold;
+    private Integer nonJapaneseSentenceWordThreshold;
+
     // Default constructor
     public PromptRequest() {
     }
@@ -21,6 +24,14 @@ public class PromptRequest {
     // Constructor with fields
     public PromptRequest(String text) {
         this.text = text;
+        this.similarityThreshold = null;
+        this.nonJapaneseSentenceWordThreshold = null;
+    }
+
+    public PromptRequest(String text, Double similarityThreshold, Integer nonJapaneseSentenceWordThreshold) {
+        this.text = text;
+        this.similarityThreshold = similarityThreshold;
+        this.nonJapaneseSentenceWordThreshold = nonJapaneseSentenceWordThreshold;
     }
 
     // Getter
@@ -31,5 +42,22 @@ public class PromptRequest {
     // Setter
     public void setText(String text) {
         this.text = text;
+    }
+
+    // Getters and Setters for new fields
+    public Double getSimilarityThreshold() {
+        return similarityThreshold;
+    }
+
+    public void setSimilarityThreshold(Double similarityThreshold) {
+        this.similarityThreshold = similarityThreshold;
+    }
+
+    public Integer getNonJapaneseSentenceWordThreshold() {
+        return nonJapaneseSentenceWordThreshold;
+    }
+
+    public void setNonJapaneseSentenceWordThreshold(Integer nonJapaneseSentenceWordThreshold) {
+        this.nonJapaneseSentenceWordThreshold = nonJapaneseSentenceWordThreshold;
     }
 }

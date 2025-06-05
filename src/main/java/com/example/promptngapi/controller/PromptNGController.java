@@ -1,5 +1,6 @@
 package com.example.promptngapi.controller;
 
+import com.example.promptngapi.config.ScoreThresholdsConfig;
 import com.example.promptngapi.dto.DetectionDetail;
 import com.example.promptngapi.dto.PromptNGResponse;
 import com.example.promptngapi.dto.PromptRequest;
@@ -25,12 +26,15 @@ public class PromptNGController {
 
     private final SensitiveInformationDetector sensitiveInformationDetector;
     private final PromptInjectionDetector promptInjectionDetector;
+    private final ScoreThresholdsConfig scoreThresholdsConfig;
 
     @Autowired
     public PromptNGController(SensitiveInformationDetector sensitiveInformationDetector,
-                              PromptInjectionDetector promptInjectionDetector) {
+                              PromptInjectionDetector promptInjectionDetector,
+                              ScoreThresholdsConfig scoreThresholdsConfig) {
         this.sensitiveInformationDetector = sensitiveInformationDetector;
         this.promptInjectionDetector = promptInjectionDetector;
+        this.scoreThresholdsConfig = scoreThresholdsConfig;
     }
 
     /**
@@ -45,11 +49,36 @@ public class PromptNGController {
     @PostMapping("/judge")
     public ResponseEntity<PromptNGResponse> judgePrompt(@Valid @RequestBody PromptRequest request) {
         String inputText = request.getText();
+        Double requestSimilarityThreshold = request.getSimilarityThreshold();
+        Integer requestNonJapaneseSentenceWordThreshold = request.getNonJapaneseSentenceWordThreshold();
 
-        List<DetectionDetail> injectionIssues = promptInjectionDetector.isPromptInjectionAttempt(inputText);
-        List<DetectionDetail> sensitiveInfoIssues = sensitiveInformationDetector.hasSensitiveInformation(inputText);
-
+        List<DetectionDetail> injectionIssues;
+        List<DetectionDetail> sensitiveInfoIssues;
         List<DetectionDetail> allDetectedIssues = new ArrayList<>();
+
+        Double effectiveSimilarityThreshold;
+        Integer effectiveNonJapaneseSentenceWordThreshold;
+
+        try {
+            if (requestSimilarityThreshold != null) {
+                ScoreThresholdsConfig.setRequestSimilarityThreshold(requestSimilarityThreshold);
+            }
+            if (requestNonJapaneseSentenceWordThreshold != null) {
+                ScoreThresholdsConfig.setRequestNonJapaneseSentenceWordThreshold(requestNonJapaneseSentenceWordThreshold);
+            }
+
+            // Perform detections using the potentially overridden thresholds
+            injectionIssues = promptInjectionDetector.isPromptInjectionAttempt(inputText);
+            sensitiveInfoIssues = sensitiveInformationDetector.hasSensitiveInformation(inputText);
+
+            // Get the actual thresholds used for this request
+            effectiveSimilarityThreshold = scoreThresholdsConfig.getSimilarityThreshold();
+            effectiveNonJapaneseSentenceWordThreshold = scoreThresholdsConfig.getNonJapaneseSentenceWordThreshold();
+
+        } finally {
+            ScoreThresholdsConfig.clearRequestThresholds();
+        }
+
         if (injectionIssues != null) {
             allDetectedIssues.addAll(injectionIssues);
         }
@@ -59,7 +88,7 @@ public class PromptNGController {
 
         boolean overallOk = allDetectedIssues.isEmpty();
 
-        PromptNGResponse response = new PromptNGResponse(overallOk, allDetectedIssues);
+        PromptNGResponse response = new PromptNGResponse(overallOk, allDetectedIssues, effectiveSimilarityThreshold, effectiveNonJapaneseSentenceWordThreshold);
 
         return ResponseEntity.ok(response);
     }
