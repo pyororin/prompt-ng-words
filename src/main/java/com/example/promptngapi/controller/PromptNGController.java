@@ -6,13 +6,18 @@ import com.example.promptngapi.dto.PromptNGResponse;
 import com.example.promptngapi.dto.PromptRequest;
 import com.example.promptngapi.service.PromptInjectionDetector;
 import com.example.promptngapi.service.SensitiveInformationDetector;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/prompt-ng/v1")
+@Tag(name = "プロンプト判定API", description = "機密情報やプロンプトインジェクションの試みをテキストプロンプトから検出するAPI")
 public class PromptNGController {
 
     private final SensitiveInformationDetector sensitiveInformationDetector;
@@ -47,7 +53,18 @@ public class PromptNGController {
      *         問題が検出された場合は overall_result が {@code false} に、検出リストに詳細が含まれます。
      */
     @PostMapping("/judge")
-    public ResponseEntity<PromptNGResponse> judgePrompt(@Valid @RequestBody PromptRequest request) {
+    @Operation(summary = "プロンプト判定", description = "提供されたテキストに対し、機密情報およびプロンプトインジェクションの試みを判定します。")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "判定成功",
+            content = @Content(mediaType = "application/json",
+            schema = @Schema(implementation = PromptNGResponse.class))),
+        @ApiResponse(responseCode = "400", description = "リクエスト不正 (例: textフィールドが空)",
+            content = @Content)
+    })
+    public ResponseEntity<PromptNGResponse> judgePrompt(
+        @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "判定対象のテキストとオプションの閾値を含むリクエストボディ", required = true,
+            content = @Content(schema = @Schema(implementation = PromptRequest.class)))
+        @Valid @org.springframework.web.bind.annotation.RequestBody PromptRequest request) {
         String inputText = request.getText();
         Double requestSimilarityThreshold = request.getSimilarityThreshold();
         Integer requestNonJapaneseSentenceWordThreshold = request.getNonJapaneseSentenceWordThreshold();
