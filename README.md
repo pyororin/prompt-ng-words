@@ -49,62 +49,63 @@ APIドキュメントには、以下のURLからアクセスできます:
 *このAPIはプロンプトの検査を支援することを目的としています。*
 ---
 
-## Integration Testing
+## 統合テスト
 
-This project includes a Spring Boot application to run integration tests based on definitions in a YAML file.
+このプロジェクトには、YAMLファイル内の定義に基づいて統合テストを実行するためのSpring Bootアプリケーションが含まれています。
 
-### Prerequisites
-- Java JDK 11 or higher
+### 前提条件
+- Java JDK 11 以上
 - Apache Maven
 
-### Test Configuration
-The integration tests are defined in `integration-tester/src/main/resources/integration-test.yaml`. You can add or modify test cases in this file following the existing structure:
+### テスト設定
+統合テストは `integration-tester/src/main/resources/integration-test.yaml` で定義されています。既存の構造に従って、このファイルにテストケースを追加または変更できます。
 
 ```yaml
 integration-test:
   prompt:
     ok:
-      - "Normal prompt example"
+      - "通常のプロンプト例"
     ng:
-      - "Problematic prompt example"
+      - "問題のあるプロンプト例"
   personal:
     ok:
-      - "Personal info, but not identifiable"
+      - "個人情報ですが、特定はできません"
     ng:
-      - "Identifiable personal information"
+      - "特定可能な個人情報"
 ```
 
-### Building the Test Application
-Navigate to the `integration-tester` directory and use Maven to build the application:
+### テストアプリケーションのビルド
+`integration-tester` ディレクトリに移動し、Mavenを使用してアプリケーションをビルドします。
 ```bash
 cd integration-tester
 mvn clean package
 ```
-This will generate a JAR file in the `integration-tester/target/` directory (e.g., `integration-tester-0.0.1-SNAPSHOT.jar`).
+これにより、`integration-tester/target/` ディレクトリにJARファイル（例: `integration-tester-0.0.1-SNAPSHOT.jar`）が生成されます。
 
-### Running the Tests
-1. Navigate to the `integration-tester` directory (if you are not already there):
+### テストの実行
+ビルド後、`integration-tester` ディレクトリから次のコマンドを使用して統合テストを実行できます（まだそのディレクトリにいない場合）。
+1. `integration-tester` ディレクトリに移動します（まだ移動していない場合）：
    ```bash
    cd integration-tester
    ```
-2. Run the integration tests using the following command:
+2. 次のコマンドを使用して統合テストを実行します。
    ```bash
    java -jar target/integration-tester-0.0.1-SNAPSHOT.jar
    ```
-This command executes the tests defined in `src/main/resources/integration-test.yaml`.
+このコマンドは `src/main/resources/integration-test.yaml` で定義されたテストを実行します。
 
-### Understanding the Results
+### 結果の確認方法
 
-After execution, you will see output in your console and a detailed report file will be generated.
+実行後、コンソールに出力が表示され、詳細なレポートファイルが生成されます。
 
-**Console Output:**
-The console will display a summary of the test run, including:
-- Total number of tests executed.
-- Number of tests that passed.
-- Number of tests that failed.
-- If there are any failed tests, details for each failed test (category, prompt, and reason for failure) will be listed.
+**コンソール出力:**
+コンソールには、テスト実行の概要が表示されます。これには以下が含まれます。
+- 実行されたテストの総数
+- 合格したテストの数
+- 失敗したテストの数
+- 失敗したテストがある場合、各失敗テストの詳細（カテゴリ、プロンプト、失敗理由）が一覧表示されます。
 
-Example Console Output:
+コンソール出力例:
 ```
 Starting Integration Tests...
 
@@ -117,15 +118,30 @@ Failed: 0
 Report generated: reports/integration_test_report_YYYYMMDD_HHMMSS.txt
 ```
 
-**Report File:**
-- A detailed report is saved as a text file in the `integration-tester/reports/` directory.
-- The filename includes a timestamp, for example: `integration_test_report_20231027_123000.txt`.
-- This file contains:
-    - The timestamp of the test run.
-    - The same summary as shown in the console (total, passed, failed).
-    - Detailed information for each failed test, if any.
+**レポートファイル:**
+- 詳細なレポートは、`integration-tester/reports/` ディレクトリにテキストファイルとして保存されます。
+- ファイル名にはタイムスタンプが含まれます（例: `integration_test_report_20231027_123000.txt`）。
+- このファイルには以下が含まれます:
+    - テスト実行のタイムスタンプ。
+    - コンソールに表示されるものと同じ概要（合計、合格、失敗）。
+    - 失敗したテストがある場合は、その詳細情報。
 
-**Interpreting Test Status (Current Simulation):**
-- **Passed:** Currently, a test is marked as "passed" if the prompt string from the YAML file is not empty.
-- **Failed:** A test is marked as "failed" if the prompt string is empty or null, or if there's an issue like the YAML file not being found.
-*(Note: This simulation logic is a placeholder. In the future, these tests will be expanded to interact with the actual API to determine pass/fail status based on its responses.)*
+**テストステータスの解釈（改善されたロジック）:**
+以前の単純な空文字チェックから、テストロジックはキーワードおよびパターンマッチングに基づく判定を行うように改善されました。
+「合格」および「失敗」の意味は以下の通りです。
+
+- **合格 (passed):**
+  テスト対象のプロンプトが、そのカテゴリ（例: `prompt.ng`、`personal.ok`）の基準に従って、システムによって正しく識別・分類されたことを意味します。
+    - `prompt.ok` の場合: プロンプトに不適切（NG）とされるキーワードや個人情報（PII）パターンが含まれていない場合に合格となります。
+    - `prompt.ng` の場合: プロンプトに不適切（NG）とされるキーワードが含まれている場合に合格となります（システムがNGであることを正しく検知した）。
+    - `personal.ok` の場合: プロンプトに特定の個人情報（PII）パターンや不適切（NG）とされるキーワードが含まれていない場合に合格となります。
+    - `personal.ng` の場合: プロンプトに特定の個人情報（PII）パターンが含まれている場合に合格となります（システムがPIIを正しく検知した）。
+
+- **失敗 (failed):**
+  システムがプロンプトをそのカテゴリの基準に従って正しく識別・分類できなかったことを意味します。
+    - 例えば、`prompt.ng` にリストされているプロンプトからNGキーワードが検出されなかった場合、そのテストは「失敗」となります。
+    - 同様に、`personal.ng` のプロンプトからPIIパターンが検出されなかった場合も「失敗」となります。
+
+レポートの「理由」フィールドには、各テストが合格または失敗した具体的な根拠（例: 「OK: NGキーワードが期待通り検出されました。」、「FAIL: personal.ngと判断されるべきプロンプトでPIIパターンが見つかりませんでした。」など）が示されます。
+
+*(注意: このキーワードおよびパターンベースのロジックは、より洗練されたAI判定への第一歩です。定義されたキーワードやパターンは `TestService.java` 内で管理されており、必要に応じて拡張できます。)*
