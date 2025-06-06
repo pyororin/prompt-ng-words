@@ -47,3 +47,46 @@ APIドキュメントには、以下のURLからアクセスできます:
 ---
 
 *このAPIはプロンプトの検査を支援することを目的としています。*
+---
+
+## Integration Testing
+
+This project includes a Spring Boot application to run integration tests based on definitions in a YAML file.
+
+### Prerequisites
+- Java JDK 11 or higher
+- Apache Maven
+
+### Test Configuration
+The integration tests are defined in `integration-tester/src/main/resources/integration-test.yaml`. You can add or modify test cases in this file following the existing structure:
+
+```yaml
+integration-test:
+  prompt:
+    ok:
+      - "Normal prompt example"
+    ng:
+      - "Problematic prompt example"
+  personal:
+    ok:
+      - "Personal info, but not identifiable"
+    ng:
+      - "Identifiable personal information"
+```
+
+### Building the Test Application
+Navigate to the `integration-tester` directory and use Maven to build the application:
+```bash
+cd integration-tester
+mvn clean package
+```
+This will generate a JAR file in the `integration-tester/target/` directory (e.g., `integration-tester-0.0.1-SNAPSHOT.jar`).
+
+### Running the Tests
+After building, you can run the integration tests using the following command from the `integration-tester` directory:
+```bash
+java -jar target/integration-tester-0.0.1-SNAPSHOT.jar
+```
+The test results will be printed to the console. A detailed report will also be generated in a timestamped text file within the `integration-tester/reports/` directory (e.g., `integration-tester/reports/integration_test_report_YYYYMMDD_HHMMSS.txt`).
+
+The application will exit with code 0 if all tests (as per current simulation logic) pass, or 1 if there are failures (e.g., YAML file not found).
