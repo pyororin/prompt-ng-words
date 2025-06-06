@@ -83,10 +83,49 @@ mvn clean package
 This will generate a JAR file in the `integration-tester/target/` directory (e.g., `integration-tester-0.0.1-SNAPSHOT.jar`).
 
 ### Running the Tests
-After building, you can run the integration tests using the following command from the `integration-tester` directory:
-```bash
-java -jar target/integration-tester-0.0.1-SNAPSHOT.jar
-```
-The test results will be printed to the console. A detailed report will also be generated in a timestamped text file within the `integration-tester/reports/` directory (e.g., `integration-tester/reports/integration_test_report_YYYYMMDD_HHMMSS.txt`).
+1. Navigate to the `integration-tester` directory (if you are not already there):
+   ```bash
+   cd integration-tester
+   ```
+2. Run the integration tests using the following command:
+   ```bash
+   java -jar target/integration-tester-0.0.1-SNAPSHOT.jar
+   ```
+This command executes the tests defined in `src/main/resources/integration-test.yaml`.
 
-The application will exit with code 0 if all tests (as per current simulation logic) pass, or 1 if there are failures (e.g., YAML file not found).
+### Understanding the Results
+
+After execution, you will see output in your console and a detailed report file will be generated.
+
+**Console Output:**
+The console will display a summary of the test run, including:
+- Total number of tests executed.
+- Number of tests that passed.
+- Number of tests that failed.
+- If there are any failed tests, details for each failed test (category, prompt, and reason for failure) will be listed.
+
+Example Console Output:
+```
+Starting Integration Tests...
+
+--- Integration Test Summary ---
+Total Tests: 8
+Passed: 8
+Failed: 0
+--- End of Summary ---
+
+Report generated: reports/integration_test_report_YYYYMMDD_HHMMSS.txt
+```
+
+**Report File:**
+- A detailed report is saved as a text file in the `integration-tester/reports/` directory.
+- The filename includes a timestamp, for example: `integration_test_report_20231027_123000.txt`.
+- This file contains:
+    - The timestamp of the test run.
+    - The same summary as shown in the console (total, passed, failed).
+    - Detailed information for each failed test, if any.
+
+**Interpreting Test Status (Current Simulation):**
+- **Passed:** Currently, a test is marked as "passed" if the prompt string from the YAML file is not empty.
+- **Failed:** A test is marked as "failed" if the prompt string is empty or null, or if there's an issue like the YAML file not being found.
+*(Note: This simulation logic is a placeholder. In the future, these tests will be expanded to interact with the actual API to determine pass/fail status based on its responses.)*
