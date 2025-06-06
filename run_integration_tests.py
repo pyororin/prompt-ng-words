@@ -17,7 +17,7 @@ def main():
     timestamp = datetime.datetime.now()
     report_lines.append(f"Integration Test Run: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-    yaml_file_path = "resources/integration-test.yaml"
+    yaml_file_path = "integration-tester/src/main/resources/integration-test.yaml"
     if not os.path.exists(yaml_file_path):
         report_lines.append(f"ERROR: YAML file not found at {yaml_file_path}")
         print(f"ERROR: YAML file not found at {yaml_file_path}")
