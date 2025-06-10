@@ -22,7 +22,9 @@ def main():
         report_lines.append(f"ERROR: YAML file not found at {yaml_file_path}")
         print(f"ERROR: YAML file not found at {yaml_file_path}")
         # Write a minimal report and exit if YAML is missing
-        report_filename = f"integration_test_report_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt"
+        report_dir = "integration-tester/reports"
+        os.makedirs(report_dir, exist_ok=True)
+        report_filename = os.path.join(report_dir, f"integration_test_report_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt")
         with open(report_filename, "w") as f:
             f.write("\n".join(report_lines))
         print(f"Report generated: {report_filename}")
@@ -35,7 +37,9 @@ def main():
             report_lines.append("ERROR: YAML file is malformed or missing 'integration-test' root key.")
             print("ERROR: YAML file is malformed or missing 'integration-test' root key.")
             # Write a minimal report and exit
-            report_filename = f"integration_test_report_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt"
+            report_dir = "integration-tester/reports"
+            os.makedirs(report_dir, exist_ok=True)
+            report_filename = os.path.join(report_dir, f"integration_test_report_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt")
             with open(report_filename, "w") as f:
                 f.write("\n".join(report_lines))
             print(f"Report generated: {report_filename}")
@@ -46,7 +50,9 @@ def main():
         report_lines.append(f"ERROR: Could not parse YAML file: {e}")
         print(f"ERROR: Could not parse YAML file: {e}")
         # Write a minimal report and exit
-        report_filename = f"integration_test_report_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt"
+        report_dir = "integration-tester/reports"
+        os.makedirs(report_dir, exist_ok=True)
+        report_filename = os.path.join(report_dir, f"integration_test_report_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt")
         with open(report_filename, "w") as f:
             f.write("\n".join(report_lines))
         print(f"Report generated: {report_filename}")
@@ -94,7 +100,9 @@ def main():
                     f"  - Category: {result['category']}, Prompt: \"{result['prompt']}\", Reason: {result['reason']}"
                 )
 
-    report_filename = f"integration_test_report_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt"
+    report_dir = "integration-tester/reports"
+    os.makedirs(report_dir, exist_ok=True)
+    report_filename = os.path.join(report_dir, f"integration_test_report_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt")
     try:
         with open(report_filename, "w") as f:
             f.write("\n".join(report_lines))
